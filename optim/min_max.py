@@ -10,9 +10,22 @@ class MinMaxLoss:
 
     def add_min_loss(self, loss: Loss):
         self.min_loss += loss
+        return self
+
 
     def add_max_loss(self, loss: Loss):
         self.max_loss += loss
+        return self
+
+    def minimize_step(self, optimizer):
+        optimizer.opt_max.zero_grad()
+        self.max_loss.maximize()
+        optimizer.opt_max.step()
+
+        optimizer.opt_min.zero_grad()
+        self.min_loss.minimize()
+        optimizer.opt_min.step()
+
 
 
 class MinMaxParameters:

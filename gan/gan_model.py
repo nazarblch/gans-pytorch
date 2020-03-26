@@ -9,10 +9,14 @@ from gan.discriminator import Discriminator
 from gan.loss.hinge import HingeLoss
 from gan.loss.vanilla import DCGANLoss
 from gan.loss.wasserstein import WassersteinLoss
+from models.common import View
 from models.lambdaf import LambdaF
+from models.munit import MsImageDis, AdaINGen
 from models.uptosize import MakeNoise, Uptosize
-from stylegan2_pytorch.model import Generator as StyleGenerator2, EqualLinear, ConvLayer
-from stylegan2_pytorch.model import Discriminator as StyleDiscriminator2
+from munit.networks import StyleEncoder, ContentEncoder, Conv2dBlock
+from munit.utils import weights_init
+from stylegan2.model import Generator as StyleGenerator2, EqualLinear, ConvLayer
+from stylegan2.model import Discriminator as StyleDiscriminator2
 from gan.generator import Generator
 from gan.loss.gan_loss import GANLoss
 from gan.loss_base import Loss
@@ -55,12 +59,7 @@ class GANModel:
         params = MinMaxParameters(self.generator.parameters(), self.loss.parameters())
         self.optimizer = MinMaxOptimizer(params, lr, lr)
 
-    def loss_pair(self, real: List[Tensor], *noise: Tensor) -> MinMaxLoss:
-
-        fake = self.generator.forward(*noise)
-
-        if not isinstance(fake, (list, tuple)):
-            fake = [fake]
+    def loss_pair(self, real: List[Tensor], fake: List[Tensor], *noise: Tensor) -> MinMaxLoss:
         return MinMaxLoss(
             self.loss.generator_loss(real, fake),
             self.loss.discriminator_loss_with_penalty(real, fake)
@@ -79,19 +78,17 @@ class GANModel:
         return self.generator.forward(*noise)
 
     def train(self, real: List[Tensor], *noise: Tensor):
-        loss = self.loss_pair(real, *noise)
+        fake = self.generator.forward(*noise)
+        if not isinstance(fake, (list, tuple)):
+            fake = [fake]
+        loss = self.loss_pair(real, fake, *noise)
         self.optimizer.train_step(loss)
         return loss.min_loss.item(), loss.max_loss.item()
 
 
 class ConditionalGANModel(GANModel):
 
-    def loss_pair(self, real: List[Tensor], condition: Tensor, *noise: Tensor) -> MinMaxLoss:
-
-        fake = self.generator.forward(condition, *noise)
-
-        if not isinstance(fake, (list, tuple)):
-            fake = [fake]
+    def loss_pair(self, real: List[Tensor], fake: List[Tensor], condition: Tensor, *noise: Tensor) -> MinMaxLoss:
         return MinMaxLoss(
             self.loss.generator_loss(real + [condition], fake + [condition]),
             self.loss.discriminator_loss_with_penalty(real + [condition], fake + [condition])
@@ -108,7 +105,10 @@ class ConditionalGANModel(GANModel):
         return super().forward(*([condition] + [*noise]))
 
     def train(self, real: List[Tensor], condition: Tensor, *noise: Tensor):
-        loss = self.loss_pair(real, condition, *noise)
+        fake = self.generator.forward(condition, *noise)
+        if not isinstance(fake, (list, tuple)):
+            fake = [fake]
+        loss = self.loss_pair(real, fake, condition, *noise)
         self.optimizer.train_step(loss)
         return loss.min_loss.item(), loss.max_loss.item()
 
@@ -307,4 +307,131 @@ def stylegan2_transfer(path: str, loss_type: str, lr: float, size1: int, size2: 
     return gan_model
 
 
+class StyleGen2Wrapper(Generator):
 
+    def __init__(self,
+                 gen: StyleGenerator2,
+                 return_latents=False,
+                 inject_index=None,
+                 truncation=1,
+                 truncation_latent=None,
+                 input_is_latent=False,
+                 randomize_noise=False):
+        super().__init__()
+        self.gen: StyleGenerator2 = gen
+        self.preproc = IdentityPreproc()
+
+        self.return_latents = return_latents
+        self.inject_index = inject_index
+        self.truncation = truncation
+        self.truncation_latent = truncation_latent
+        self.input_is_latent = input_is_latent
+        self.randomize_noise = randomize_noise
+
+    def forward(self, *input: Tensor):
+
+        styles, noise = self.preproc(*input)
+        if not isinstance(styles, list):
+            styles = [styles]
+
+        img, latent = self.gen(styles,
+                        self.return_latents,
+                        self.inject_index,
+                        self.truncation,
+                        self.truncation_latent,
+                        self.input_is_latent,
+                        noise,
+                        self.randomize_noise)
+
+        if self.return_latents:
+            return img, latent
+        else:
+            return img
+
+class Gen_wrapper(nn.Module):
+    def __init__(self, gen, args):
+        super().__init__()
+        self.increaser = nn.Sequential(
+            nn.Linear(140, 64*64),
+            View(-1, 8, 8),
+            nn.Upsample(scale_factor=2),
+            # Conv2dBlock(140, 118, 3, 1, 1, norm='ln', activation=args.activ, pad_type=args.pad_type),
+            # nn.Upsample(scale_factor=2),
+            # Conv2dBlock(118, 96, 3, 1, 1, norm='ln', activation=args.activ, pad_type=args.pad_type),
+            # nn.Upsample(scale_factor=2),
+            # Conv2dBlock(512, 256, 3, 1, 1, norm='none', activation=args.activ, pad_type=args.pad_type),
+            # nn.Upsample(scale_factor=4),
+            Conv2dBlock(64, 128, 3, 1, 1, norm='ln', activation=args.activ, pad_type=args.pad_type),
+            nn.Upsample(scale_factor=4),
+            Conv2dBlock(128, 64, 3, 1, 1, norm='ln', activation=args.activ, pad_type=args.pad_type),
+            # nn.Upsample(scale_factor=4),
+            # Conv2dBlock(32, 64, 3, 1, 1, norm='ln', activation=args.activ, pad_type=args.pad_type),
+            # nn.Conv2d(16, 64, 3, 1, 1)
+        ).cuda()
+        self.gen = gen
+
+    def forward(self, cont, style):
+        cont = self.increaser(cont)
+        return self.gen(cont, style)
+
+
+def ganmodel_munit(loss_type: str, lr: float, args) -> GANModel:
+    input_dim = args.input_dim
+    dim = args.dim
+    style_dim = args.style_dim
+    n_downsample = args.n_downsample
+    n_res = args.n_res
+    activ = args.activ
+    pad_type = args.pad_type
+    mlp_dim = args.mlp_dim
+    n_layer = args.n_layer
+    norm = args.norm
+    num_scales = args.num_scales
+
+    gen = AdaINGen(input_dim, dim, style_dim, n_downsample, n_res, activ, pad_type, mlp_dim).cuda()
+    # conv_module = nn.Conv2d(1, 64, 3, 1, 1).cuda()
+    # gen = LambdaF(
+    #     [conv_module, gen],
+    #     lambda cont, style: gen(conv_module(cont), style)
+    # )
+    gen = Gen_wrapper(gen, args)
+
+    disc = MsImageDis(input_dim, n_layer, dim, norm, activ, num_scales, pad_type).cuda()
+
+    gen.apply(weights_init('kaiming'))
+    disc.apply(weights_init('gaussian'))
+
+    loss: GANLoss = name_to_gan_loss[loss_type](disc)
+    gan_model = GANModel(
+        gen,
+        loss,
+        lr=lr,
+        do_init_ws=False
+    )
+
+    return gan_model
+
+
+def cont_style_munit_enc(args):
+    enc_style = StyleEncoder(n_downsample=4, input_dim=args.input_dim, dim=args.dim, style_dim=args.style_dim,
+                             norm=args.norm, activ=args.activ, pad_type=args.pad_type).cuda()
+    enc_content: ContentEncoder = ContentEncoder(args.n_downsample, args.n_res, args.input_dim, args.dim, 'in',
+                                                 args.activ,
+                                                 args.pad_type).cuda()
+
+    enc_content = nn.Sequential(
+        enc_content,
+        # nn.Conv2d(64, 1, 3, 1, 1),
+        Conv2dBlock(64, 128, 6, 4, 1, norm='in', activation=args.activ, pad_type=args.pad_type),
+        Conv2dBlock(128, 64, 4, 2, 1, norm='in', activation=args.activ, pad_type=args.pad_type),
+        View(-1),
+        nn.Linear(64 * 64, 140),
+        nn.Sigmoid()
+        # Conv2dBlock(256, 512, 6, 4, 1, norm='none', activation=args.activ, pad_type=args.pad_type),
+        # Conv2dBlock(72, 96, 6, 4, 1, norm='in', activation=args.activ, pad_type=args.pad_type),
+        # Conv2dBlock(96, 118, 4, 2, 1, norm='in', activation=args.activ, pad_type=args.pad_type),
+        # Conv2dBlock(118, 140, 4, 2, 1, norm='in', activation=args.activ, pad_type=args.pad_type),
+    ).cuda()
+    enc_content.apply(weights_init('kaiming'))
+    enc_style.apply(weights_init('kaiming'))
+    return LambdaF([enc_content, enc_style], lambda img: (enc_content.forward(img), enc_style.forward(img)))

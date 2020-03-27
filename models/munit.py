@@ -53,11 +53,11 @@ class MsImageDis(Discriminator):
         cnn_x = []
         cnn_x += [Conv2dBlock(self.input_dim, dim, 4, 2, 1, norm='none', activation=self.activ, pad_type=self.pad_type)]
         next_dim = 0
-        for i in range(deep - 2):
+        for i in range(deep - 3):
             next_dim = min(dim * 2, 256)
             cnn_x += [Conv2dBlock(dim, next_dim, 4, 2, 1, norm=self.norm, activation=self.activ, pad_type=self.pad_type)]
             dim = min(dim * 2, 256)
-        cnn_x += [View(-1), nn.Linear(next_dim * 4, 1)]
+        cnn_x += [View(-1), nn.Linear(next_dim * 16, 1)]
         # cnn_x += [nn.Conv2d(dim, 1, 1, 1, 0)]
         cnn_x = nn.Sequential(*cnn_x)
         return cnn_x

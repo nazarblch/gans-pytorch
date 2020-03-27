@@ -6,48 +6,7 @@ import torch
 from torch.nn import functional as F
 from gans_pytorch.stylegan2.model import Blur, ConvLayer
 from gans_pytorch.stylegan2.op import FusedLeakyReLU
-
-class ScaledConvTranspose2d(nn.Module):
-    def __init__(
-        self,
-        in_channel,
-        out_channel,
-        kernel_size,
-        blur_kernel=[1, 3, 3, 1]):
-
-        super().__init__()
-
-        self.eps = 1e-8
-        self.kernel_size = kernel_size
-        self.in_channel = in_channel
-        self.out_channel = out_channel
-
-        factor = 2
-        p = (len(blur_kernel) - factor) - (kernel_size - 1)
-        pad0 = (p + 1) // 2 + factor - 1
-        pad1 = p // 2 + 1
-
-        self.blur = Blur(blur_kernel, pad=(pad0, pad1), upsample_factor=factor)
-
-        fan_in = in_channel * kernel_size ** 2
-        self.scale = 1 / math.sqrt(fan_in)
-        self.padding = kernel_size // 2
-
-        self.weight = nn.Parameter(
-            torch.randn(in_channel, out_channel, kernel_size, kernel_size)
-        )
-
-        self.activate = FusedLeakyReLU(out_channel)
-
-    def forward(self, input: Tensor):
-
-        weight = self.scale * self.weight
-
-        out = F.conv_transpose2d(input, weight, padding=0, stride=2)
-        out = self.blur(out)
-        out = self.activate(out)
-
-        return out
+from models.stylegan import ScaledConvTranspose2d
 
 
 class Uptosize(nn.Module):

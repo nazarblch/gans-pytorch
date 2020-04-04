@@ -1,6 +1,6 @@
 import torch
 from abc import ABC, abstractmethod
-from typing import Callable, List
+from typing import Callable, List, Tuple
 from torch import Tensor
 import numpy as np
 
@@ -29,18 +29,12 @@ class GradientDiscriminatorPenalty(DiscriminatorPenalty):
     def __init__(self, mix=default_mix):
         self.mix = mix
 
-
-
     @abstractmethod
-    def _compute(self, grad: List[Tensor]) -> Loss: pass
+    def _compute(self, grad: Tuple[Tensor]) -> Loss: pass
 
     def gradient_point(self, x: List[Tensor], y: List[Tensor]) -> List[Tensor]:
-        eps = np.random.random_sample()
-        x0: List[Tensor] = [self.mix(xi, yi).detach().requires_grad_(True) for xi, yi in
-                            zip(x, y)]
+        x0: List[Tensor] = [self.mix(xi, yi).detach().requires_grad_(True) for xi, yi in zip(x, y)]
         return x0
-
-
 
     def __call__(
             self,
@@ -53,11 +47,11 @@ class GradientDiscriminatorPenalty(DiscriminatorPenalty):
         x0 = self.gradient_point(x, y)
         dx0: Tensor = discriminator.forward(*x0)
 
-        grads: List[Tensor] = torch.autograd.grad(outputs=dx0,
+        grads: Tuple[Tensor] = torch.autograd.grad(
+                                   outputs=dx0.sum(),
                                    inputs=x0,
-                                   grad_outputs=torch.ones(dx0.shape, device=dx0.device),
+                                   # grad_outputs=torch.ones(dx0.shape, device=dx0.device),
                                    create_graph=True,
-                                   retain_graph=True,
                                    only_inputs=True)
 
         return self._compute(grads)

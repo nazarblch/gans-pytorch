@@ -12,7 +12,6 @@ class MinMaxLoss:
         self.min_loss += loss
         return self
 
-
     def add_max_loss(self, loss: Loss):
         self.max_loss += loss
         return self
@@ -26,6 +25,8 @@ class MinMaxLoss:
         self.min_loss.minimize()
         optimizer.opt_min.step()
 
+    def mul(self, w: float):
+        return MinMaxLoss(self.min_loss * w, self.max_loss * w)
 
 
 class MinMaxParameters:
@@ -42,14 +43,16 @@ class MinMaxOptimizer:
                  parameters: MinMaxParameters,
                  min_learning_rate: float,
                  max_learning_rate: float,
-                 betas=(0.5, 0.999)):
+                 min_betas=(0.5, 0.999),
+                 max_betas=(0.5, 0.999)
+                 ):
 
         self.opt_max = optim.Adam(parameters.max_parameters,
                                   lr=max_learning_rate,
-                                  betas=betas)
+                                  betas=max_betas)
         self.opt_min = optim.Adam(parameters.min_parameters,
                                   lr=min_learning_rate,
-                                  betas=betas)
+                                  betas=min_betas)
 
     def train_step(self, loss: MinMaxLoss):
 

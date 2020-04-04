@@ -2,7 +2,9 @@ import math
 import torch
 from torch import nn, Tensor
 from torch.nn import functional as F
-from stylegan2.model import EqualLinear
+
+from op import FusedLeakyReLU
+from stylegan2.model import EqualLinear, EqualConv2d, NoiseInjection, StyledConv, Blur
 
 
 class ModulatedConv2d(nn.Module):
@@ -85,9 +87,62 @@ class ScaledConvTranspose2d(nn.Module):
             requires_grad=True
         )
 
+        factor = 2
+        blur_kernel = [1, 3, 3, 1]
+        p = (len(blur_kernel) - factor) - (kernel_size - 1)
+        pad0 = (p + 1) // 2 + factor - 1
+        pad1 = p // 2 + 1
+
+        self.blur = Blur(blur_kernel, pad=(pad0, pad1), upsample_factor=factor)
+        self.activate = FusedLeakyReLU(out_channel)
+
     def forward(self, input: Tensor):
 
         weight = self.scale * self.weight
         out = F.conv_transpose2d(input, weight, padding=0, stride=2)
 
+        return self.activate(self.blur(out))
+
+
+class ModulatedResBlock(nn.Module):
+    def __init__(self, dim, style_dim):
+        super(ModulatedResBlock, self).__init__()
+
+        self.conv1 = StyledConv(dim, dim, 3, style_dim) #ModulatedConv2d(dim, dim, 3, style_dim)
+        self.conv2 = StyledConv(dim, dim, 3, style_dim) #ModulatedConv2d(dim, dim, 3, style_dim)
+        self.res = EqualConv2d(dim, dim, 1, 1, 0)
+        self.noise1 = nn.Parameter(torch.randn(1, 1, 64, 64), requires_grad=False)
+        self.noise2 = nn.Parameter(torch.randn(1, 1, 64, 64), requires_grad=False)
+
+
+    def forward(self, x: Tensor, style: Tensor):
+        residual = x
+        # out = self.activation(
+        #         self.module_noise(self.conv1(x, style), self.noise1)
+        # )
+        # out = self.activation(
+        #     self.module_noise(
+        #         self.conv2(out, style),
+        #         self.noise2
+        #     )
+        # )
+        # out = self.conv1(x, style)
+        out = self.conv1(x, style, self.noise1)
+        # out = self.conv2(out, style)
+        out = self.conv2(out, style, self.noise2)
+        out = (out + self.res(residual)) / math.sqrt(2)
         return out
+
+
+class ModulatedResBlocks(nn.Module):
+    def __init__(self, num_blocks, dim, style_dim, norm=None):
+        super(ModulatedResBlocks, self).__init__()
+        self.model = nn.ModuleList()
+        for i in range(num_blocks):
+            self.model.append(ModulatedResBlock(dim, style_dim))
+
+
+    def forward(self, x, style):
+        for i in range(len(self.model)):
+            x = self.model[i](x, style)
+        return x

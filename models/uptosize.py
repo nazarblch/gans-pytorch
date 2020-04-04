@@ -4,8 +4,9 @@ from typing import List
 from torch import nn, Tensor
 import torch
 from torch.nn import functional as F
-from gans_pytorch.stylegan2.model import Blur, ConvLayer
+from gans_pytorch.stylegan2.model import Blur, ConvLayer, EqualLinear
 from gans_pytorch.stylegan2.op import FusedLeakyReLU
+from models.common import View
 from models.stylegan import ScaledConvTranspose2d
 
 
@@ -14,11 +15,13 @@ class Uptosize(nn.Module):
     def __init__(self, channel1, channel2, size2):
         super().__init__()
         modules = [
-            ScaledConvTranspose2d(channel1, channel1//2, 3)
+            EqualLinear(channel1, channel1 * 4 * 2),
+            nn.LeakyReLU(0.2, inplace=True),
+            View(channel1 // 2, 4, 4)
         ]
-        tmp_size = 2
+        tmp_size = 4
         tmp_channel = channel1//2
-        min_nc = 8
+        min_nc = 16
         while tmp_size < size2:
             nc_next = max(min_nc, tmp_channel//2)
             modules.append(ScaledConvTranspose2d(tmp_channel, nc_next, 3))
@@ -30,7 +33,7 @@ class Uptosize(nn.Module):
         self.main = nn.Sequential(*modules)
 
     def forward(self, input: Tensor):
-        return self.main(input.view(input.shape[0], input.shape[1], 1, 1))
+        return self.main(input.view(input.shape[0], input.shape[1]))
 
 
 class UpsampleList(nn.Module):
@@ -42,8 +45,9 @@ class UpsampleList(nn.Module):
 
         self.upsamples = nn.ModuleList()
         self.upsamples.append(nn.Sequential(
-            ScaledConvTranspose2d(nc, nc // 2, 3),
-            ScaledConvTranspose2d(nc // 2, nc // 2, 3)
+            EqualLinear(nc, nc * 4 * 2),
+            nn.LeakyReLU(0.2, inplace=True),
+            View(nc // 2, 4, 4)
         ))
 
         tmp_channel = nc // 2
@@ -58,9 +62,7 @@ class UpsampleList(nn.Module):
     def forward(self, vector: Tensor) -> List[Tensor]:
         batch = vector.shape[0]
         res = [
-            self.upsamples[0](
-                vector.view(batch, self.nc, 1, 1)
-            )
+            self.upsamples[0](vector)
         ]
 
         for layer in self.upsamples[1:]:
@@ -73,10 +75,10 @@ class UpsampleList(nn.Module):
 
 class MakeNoise(nn.Module):
 
-    def __init__(self, num_layers: int, nc: int):
+    def __init__(self, num_layers: int, nc: int, noise_nc: List[int]):
         super().__init__()
 
-        nc_min = 4
+        nc_min = 16
         self.upsample = UpsampleList(num_layers, nc, nc_min)
         self.to_noise = nn.ModuleList()
         tmp_channel = nc
@@ -84,7 +86,7 @@ class MakeNoise(nn.Module):
         for i in range(num_layers):
             tmp_channel = max(nc_min, tmp_channel // 2)
             self.to_noise.append(
-                ConvLayer(tmp_channel, 1, 3)
+                ConvLayer(tmp_channel, noise_nc[i], 3)
             )
 
     def forward(self, vector: Tensor):

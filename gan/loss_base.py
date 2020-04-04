@@ -49,7 +49,10 @@ class Loss:
         optimizer.step()
 
     def item(self) -> float:
-        return self.__tensor.item()
+        if isinstance(self.__tensor, Tensor):
+            return self.__tensor.item()
+        else:
+            return self.__tensor
 
     def to_tensor(self) -> Tensor:
         return self.__tensor

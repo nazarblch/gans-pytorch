@@ -1,5 +1,5 @@
 from itertools import chain
-from typing import List, Dict, Callable, Tuple, Optional
+from typing import List, Dict, Callable, Tuple, Optional, TypeVar, Generic, Any
 
 import math
 import torch
@@ -155,16 +155,17 @@ name_to_gan_loss = {
 }
 
 
-class CondStyleGanModel(ConditionalGANModel):
+GeneratorClass = TypeVar('GeneratorClass', bound=Generator)
+class CondStyleGanModel(ConditionalGANModel, Generic[GeneratorClass]):
 
-    def __init__(self, generator: Generator, loss: GANLoss, lr: Tuple[float, float] = (0.0015, 0.002)):
+    def __init__(self, generator: GeneratorClass, loss: GANLoss, lr: Tuple[float, float] = (0.0015, 0.002)):
         self.generator = generator
         self.loss = loss
         params = MinMaxParameters(self.generator.parameters(), self.loss.parameters())
         self.optimizer = MinMaxOptimizer(params, lr[0], lr[1], min_betas=(0, 0.792), max_betas=(0, 0.932))
 
-        self.g_reg_every = 4
-        self.path_regularize = 2
+        self.g_reg_every = 5
+        self.path_regularize = 1
 
         self.gen_penalty = PenaltyWithCounter(
             StyleGeneratorPenalty(self.path_regularize * self.g_reg_every),
@@ -174,23 +175,23 @@ class CondStyleGanModel(ConditionalGANModel):
     def train(self, real: List[Tensor], condition: Tensor, noise: List[Tensor]):
 
         condition = condition.detach().requires_grad_(True)
+        condition_detach = condition.detach()
 
         # requires_grad(self.generator, False)
         requires_grad(self.loss.discriminator, True)
 
         fake_img, latent = self.generator(condition, noise, return_latents=True)
 
-        self.loss.discriminator_loss_with_penalty(real + [condition.detach()], [fake_img, condition.detach()]).maximize_step(
-            self.optimizer.opt_max)
-
+        self.loss.discriminator_loss_with_penalty(
+            real + [condition_detach],
+            [fake_img.detach(), condition_detach]).maximize_step(self.optimizer.opt_max)
 
         requires_grad(self.generator, True)
         requires_grad(self.loss.discriminator, False)
 
-
         (
-            self.gen_penalty(fake_img, [latent, condition]) +
-            self.loss.generator_loss(real + [condition.detach()], [fake_img, condition.detach()])
+            self.loss.generator_loss(real + [condition_detach], [fake_img, condition_detach]) +\
+            self.gen_penalty(fake_img, [latent, condition])
         ).minimize_step(self.optimizer.opt_min)
 
 
@@ -527,20 +528,21 @@ class CondGen2(nn.Module):
             nn.LeakyReLU(0.2, inplace=True),
         )
 
+        self.inject_index = 2
+
     def decode(self, cond: Tensor, latent: Tensor):
         noise = self.noise(cond)
         input = self.condition_preproc(cond)
         latent = [latent[:, 0], latent[:, 1]]
-        return self.gen(latent, condition=input, noise=noise, input_is_latent=True)[0]
-
+        return self.gen(latent, condition=input, noise=noise, input_is_latent=True, inject_index=self.inject_index)[0]
 
     def forward(self, cond: Tensor, z: List[Tensor], return_latents=False):
 
         noise = self.noise(cond)
         input = self.condition_preproc(cond)
 
-        for i in range(len(noise)):
-            if i > 1 and i % 2 == 0:
-                noise[i] = None
+        # for i in range(len(noise)):
+        #     if i > 1 and i % 2 == 0:
+        #         noise[i] = None
 
-        return self.gen(z, condition=input, noise=noise, return_latents=return_latents)
+        return self.gen(z, condition=input, noise=noise, return_latents=return_latents, inject_index=self.inject_index)

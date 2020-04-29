@@ -399,5 +399,5 @@ class MunitEncoder(nn.Module):
 
     def forward(self, img: Tensor) -> Tuple[Tensor, Tensor]:
         content = self.enc_content(img) * 255 / 256
-        style = self.enc_style(img).view(img.shape[0], self.style_dim)
+        style = self.enc_style(img)
         return content, style

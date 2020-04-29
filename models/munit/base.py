@@ -5,9 +5,9 @@ Licensed under the CC BY-NC-SA 4.0 license (https://creativecommons.org/licenses
 from typing import List
 from torch import nn, Tensor
 import torch
-from discriminator import Discriminator
-from generator import Generator
-from gans_pytorch.stylegan2.model import EqualLinear, ResBlock, EqualConv2d, StyledConv, ToRGB, PixelNorm
+from gan.discriminator import Discriminator
+from gan.generator import Generator
+from stylegan2.model import EqualLinear, ResBlock, EqualConv2d, StyledConv, ToRGB, PixelNorm
 from models.common import View
 from models.stylegan import ModulatedResBlocks
 # from munit.networks import Conv2dBlock, StyleEncoder, ContentEncoder, MLP

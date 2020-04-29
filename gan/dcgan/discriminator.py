@@ -1,6 +1,7 @@
 import torch
 from torch import nn, Tensor
 from gan.discriminator import Discriminator as D
+from model import EqualConv2d, EqualLinear
 from models.attention import SelfAttention2d
 from models.common import View
 from models.positive import PosConv2d, PosLinear
@@ -82,41 +83,32 @@ class ConvICNN128(D):
         super(ConvICNN128, self).__init__()
 
         self.first_linear = nn.Sequential(
-            nn.Conv2d(channels, 128, kernel_size=3, padding=1, bias=False),
-            nn.Conv2d(128, 128, kernel_size=3, padding=1, bias=False),
-            nn.Conv2d(128, 128, kernel_size=3, padding=1, bias=False),
-            nn.Conv2d(128, 128, kernel_size=3, padding=1, bias=True),
+            EqualConv2d(channels, 64, kernel_size=3, padding=1, bias=True),
         )
 
         self.first_squared = nn.Sequential(
-            nn.Conv2d(channels, 128, kernel_size=3, padding=1, bias=False),
-            nn.Conv2d(128, 128, kernel_size=3, padding=1, bias=False),
-            nn.Conv2d(128, 128, kernel_size=3, padding=1, bias=False),
-            nn.Conv2d(128, 128, kernel_size=3, padding=1, bias=False),
+            EqualConv2d(channels, 64, kernel_size=3, padding=1, bias=True),
         )
 
         self.convex = nn.Sequential(
-            nn.CELU(),
-            nn.Conv2d(128, 128, kernel_size=3, stride=2, bias=True, padding=1),
-            nn.CELU(),
-            nn.Conv2d(128, 128, kernel_size=3, stride=2, bias=True, padding=1),
-            nn.CELU(),
-            nn.Conv2d(128, 128, kernel_size=3, stride=2, bias=True, padding=1),
-            nn.CELU(),
-            nn.Conv2d(128, 128, kernel_size=3, stride=2, bias=True, padding=1),
-            nn.CELU(),
-            nn.Conv2d(128, 128, kernel_size=3, stride=2, bias=True, padding=1),
-            nn.CELU(),
-            View(-1, 32 * 8 * 8),
-            nn.CELU(),
-            nn.Linear(32 * 8 * 8, 128),
-            nn.CELU(),
-            nn.Linear(128, 64),
-            nn.CELU(),
-            nn.Linear(64, 32),
-            nn.CELU(),
-            nn.Linear(32, 1),
-            View(-1)
+            nn.LeakyReLU(0.2),
+            PosConv2d(64, 128, kernel_size=3, stride=2, bias=True, padding=1),
+            nn.LeakyReLU(0.2),
+            PosConv2d(128, 128, kernel_size=3, stride=2, bias=True, padding=1),
+            nn.LeakyReLU(0.2),
+            PosConv2d(128, 128, kernel_size=3, stride=2, bias=True, padding=1),
+            nn.LeakyReLU(0.2),
+            PosConv2d(128, 128, kernel_size=3, stride=2, bias=True, padding=1),
+            nn.LeakyReLU(0.2),
+            PosConv2d(128, 128, kernel_size=3, stride=2, bias=True, padding=1),
+            nn.LeakyReLU(0.2),
+            PosConv2d(128, 128, kernel_size=3, stride=2, bias=True, padding=1),
+            nn.LeakyReLU(0.2),
+            View(-1, 128 * 4 * 4),
+            nn.LeakyReLU(0.2),
+            PosLinear(128 * 4 * 4, 128, activation=False),
+            nn.LeakyReLU(0.2),
+            PosLinear(128, 1, activation=False)
         ).cuda()
 
     def forward(self, input):
@@ -133,8 +125,11 @@ class ConvICNN128(D):
 
     def convexify(self):
         for layer in self.convex:
-            if (isinstance(layer, nn.Linear)) or (isinstance(layer, nn.Conv2d)):
+            # if (isinstance(layer, nn.Linear)) or (isinstance(layer, nn.Conv2d)):
+            try:
                 layer.weight.data.clamp_(0)
+            except:
+                pass
 
 
 

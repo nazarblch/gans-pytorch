@@ -16,8 +16,6 @@ from models.common import View
 from models.lambdamodule import LambdaModule
 from models.munit.enc_dec import MsImageDis, AdaINGen, MunitEncoder, CondMsImageDis
 from models.uptosize import MakeNoise, Uptosize
-from models.munit.enc_dec import StyleEncoder, ContentEncoder, Conv2dBlock #LayerNorm
-from munit.utils import weights_init
 from stylegan2.model import Generator as StyleGenerator2, EqualLinear, ConvLayer, EqualConv2d, StyledConv
 from stylegan2.model import Discriminator as StyleDiscriminator2
 from gan.generator import Generator

@@ -1,9 +1,9 @@
 from typing import List, Tuple
 from torch import nn, Tensor
 import torch
-from discriminator import Discriminator
-from generator import Generator
-from gans_pytorch.stylegan2.model import EqualLinear, ResBlock, EqualConv2d, StyledConv, ToRGB, PixelNorm
+from gan.discriminator import Discriminator
+from gan.generator import Generator
+from stylegan2.model import EqualLinear, ResBlock, EqualConv2d, StyledConv, ToRGB, PixelNorm
 from models.common import View
 from models.stylegan import ModulatedResBlocks, ModulatedResBlock
 from models.munit.base import Conv2dBlock, ResBlocksMunit, MLP

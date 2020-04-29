@@ -11,11 +11,11 @@ class EDiscriminator(D):
         self.main = nn.Sequential(
             nn.Linear(dim, ndf),
             nn.LeakyReLU(0.2, True),
-            PosLinear(ndf, 2 * ndf),
-            nn.CELU(inplace=True),
-            PosLinear(2 * ndf, 2 * ndf),
-            nn.CELU(inplace=True),
-            PosLinear(2 * ndf, 1),
+            PosLinear(ndf, 2 * ndf, activation=None),
+            nn.LeakyReLU(0.2, True),
+            PosLinear(2 * ndf, 2 * ndf, activation=None),
+            nn.LeakyReLU(0.2, True),
+            PosLinear(2 * ndf, 1, activation=None),
         )
 
     def forward(self, x: Tensor) -> Tensor:

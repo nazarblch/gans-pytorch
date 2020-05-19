@@ -6,7 +6,7 @@ from gan.loss.penalties.penalty import GradientDiscriminatorPenalty, Discriminat
 from torch import Tensor
 import torch
 from typing import List, Callable, Tuple, TypeVar
-from gans_pytorch.gan.loss_base import Loss
+from gan.loss_base import Loss
 
 
 PenClass = TypeVar('PenClass')

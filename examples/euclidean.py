@@ -10,7 +10,7 @@ from gan.gan_model import GANModel
 from gan.euclidean.discriminator import EDiscriminator
 from gan.euclidean.generator import EGenerator
 from gan.loss.hinge import HingeLoss
-from gan.loss.penalties.conjugate import ConjugateGANLoss
+from gan.loss.penalties.conjugate import ConjugateGANLoss, ConjugateGANLoss2
 from gan.loss.wasserstein import WassersteinLoss
 from gan.noise.normal import NormalNoise
 from models.grad import Grad
@@ -24,17 +24,15 @@ device = torch.device("cuda:1")
 
 noise = NormalNoise(noise_size, device)
 netG = EGenerator(noise_size).to(device)
-netT = Grad(EDiscriminator()).to(device)
-netD = EDiscriminator().to(device)
+netD_1 = EDiscriminator().to(device)
+netD_2 = EDiscriminator().to(device)
 
 lr = 0.001
 betas = (0.5, 0.999)
 
 gan_model = ConjugateGANModel(
     netG,
-    ConjugateGANLoss(netD, netT, 1),
-    lr=lr,
-    do_init_ws=False
+    ConjugateGANLoss2(netD_1, netD_2, 10),
 )
 
 
@@ -66,10 +64,10 @@ for iter in range(0, 9000):
 
     data = gen_batch().to(device)
     z = noise.sample(batch_size)
-    loss_d = gan_model.train_disc([data], z)
+    loss_d = gan_model.train_disc(data, z)
 
     loss_g = 0
-    if iter % 5 == 0 and iter > 1000:
+    if iter % 5 == 0 and iter > 100:
         loss_g = gan_model.train_gen(z)
 
     if iter % 300 == 0:

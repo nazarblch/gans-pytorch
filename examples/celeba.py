@@ -9,20 +9,19 @@ import torchvision.transforms as transforms
 from torch import nn, Tensor
 from torchvision import utils
 
+from gan.dcgan.discriminator import ConvICNN128
+from stylegan2.model import Generator as StyleGen
 from gan.conjugate_gan_model import ConjugateGANModel
-from gan.dcgan.discriminator import DCDiscriminator, PosDCDiscriminator, ConvICNN128
-from gan.dcgan.generator import DCGenerator
-from gan.gan_model import stylegan2
-from gan.image2image.residual_generator import ResidualGenerator
-from gan.loss.penalties.conjugate import ConjugateGANLoss
-from gan.noise.normal import NormalNoise
+from gan.loss.penalties.conjugate import ConjugateGANLoss, ConjugateGANLoss2
 from models.grad import Grad
+from models.positive import PosDiscriminator
+from stylegan2.train import mixing_noise
 
 manualSeed = 999
 random.seed(manualSeed)
 torch.manual_seed(manualSeed)
 
-batch_size = 4
+batch_size = 8
 image_size = 256
 noise_size = 512
 
@@ -37,33 +36,13 @@ dataset = dset.ImageFolder(root="/raid/data/celeba",
                                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                            ]))
 
-dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
-                                         shuffle=True, num_workers=12)
+dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=12)
 
-stylegan = stylegan2(
-    "/home/ibespalov/stylegan2/stylegan2-pytorch/checkpoint/790000.pt",
-    "hinge",
-    0.002
-)
+netG = StyleGen(256, 512, 4, 1).to(device)
+netD_1 = PosDiscriminator(256).to(device)
+netD_2 = PosDiscriminator(256).to(device)
 
-class GanPreproc(nn.Module):
-
-        def forward(self, z: Tensor):
-            return [z, z], None
-
-device = torch.device("cuda")
-noise = NormalNoise(noise_size, device)
-netG = stylegan.generator
-netG.preproc = GanPreproc()
-netD = PosDCDiscriminator(image_size).to(device)
-netT = Grad(PosDCDiscriminator(image_size)).to(device)
-
-
-gan_model = ConjugateGANModel(netG, ConjugateGANLoss(netD, netT), lr=0.0012, do_init_ws=False)
-
-# netD.convexify()
-# netT.net.convexify()
-
+gan_model = ConjugateGANModel(netG, ConjugateGANLoss2(netD_1, netD_2))
 
 print("Starting Training Loop...")
 
@@ -71,15 +50,13 @@ for epoch in range(5):
     for i, data in enumerate(dataloader, 0):
 
         imgs = data[0].to(device)
-        z = noise.sample(batch_size)
+        noise = mixing_noise(batch_size, 512, 0.9, device)
 
-        loss_d = gan_model.train_disc([imgs], z)
-        # netD.convexify()
-        # netT.net.convexify()
+        loss_d = gan_model.train_disc(imgs, noise)
 
         loss_g = 0
-        if i % 5 == 0 and i > 0:
-            loss_g = gan_model.train_gen(z)
+        if i > 50:
+            loss_g = gan_model.train_gen(noise)
 
         # Output training stats
         if i % 10 == 0:
@@ -89,7 +66,8 @@ for epoch in range(5):
 
         if i % 100 == 0:
             # with torch.no_grad():
-                fake = gan_model.forward(z).detach().cpu()
+                fake = gan_model.forward(noise).detach().cpu()
+                # print(fake)
                 utils.save_image(
                     fake, f'sample_{i}.png', nrow=batch_size//2, normalize=True, range=(-1, 1)
                 )

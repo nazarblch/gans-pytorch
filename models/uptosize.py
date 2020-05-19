@@ -4,8 +4,8 @@ from typing import List
 from torch import nn, Tensor
 import torch
 from torch.nn import functional as F
-from gans_pytorch.stylegan2.model import Blur, ConvLayer, EqualLinear
-from gans_pytorch.stylegan2.op import FusedLeakyReLU
+from stylegan2.model import Blur, ConvLayer, EqualLinear
+from stylegan2.op import FusedLeakyReLU
 from models.common import View
 from models.stylegan import ScaledConvTranspose2d
 

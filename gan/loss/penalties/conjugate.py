@@ -17,12 +17,13 @@ class ConjugateGANLoss:
             self,
             Dx: Discriminator,
             Tyx: Generator,
-            pen_weight: float = 10):
+            pen_weight: float = 100):
 
         self.Dx = Dx
         self.Tyx = Tyx
         self.pen_weight = pen_weight
         self.mix = default_mix
+        print("pen_w: ", pen_weight)
 
     def parameters(self):
         return chain(self.Dx.parameters(), self.Tyx.parameters())
@@ -40,43 +41,42 @@ class ConjugateGANLoss:
 
         dx0: Tensor = self.Dx.forward(x0)
 
-        res = torch.autograd.grad(outputs=dx0,
+        res, = torch.autograd.grad(outputs=dx0,
                                    inputs=x0,
                                    grad_outputs=torch.ones(dx0.shape, device=dx0.device),
                                    create_graph=create_graph,
                                    only_inputs=True)
-        return res[0]
+
+        return res
 
     def product(self, x: Tensor, y: Tensor):
         n = x[0].shape[0]
         return (x * y).view(n, -1).sum(1).mean()
 
     def transport_loss(self, y: Tensor):
+        L1 = nn.L1Loss()
         y = y.detach()
         ty: Tensor = self.Tyx(y)
-
-        return Loss(self.product(ty, y) - self.Dx(ty).mean())
+        y_pred = self.d_grad(ty)
+        return Loss(self.product(ty, y) - self.Dx(ty).mean() - L1(y_pred, y) * self.pen_weight)
 
     def discriminator_loss(self, x: Tensor, y: Tensor):
         L1 = nn.L1Loss()
+        L2 = nn.MSELoss()
 
         x = x.detach()
         y = y.detach()
 
-        tyx: Tensor = self.Tyx(y).detach()  # detach ?
+        tyx: Tensor = self.Tyx(y).detach()
         loss: Tensor = self.Dx(x).mean() + self.product(tyx, y) - self.Dx(tyx).mean()
 
-        x0 = self.gradient_point([tyx], [x])[0]
-        tx0y = self.d_grad(x0)
-        x0_pred = self.Tyx(tx0y)
+        x_pred = self.Tyx(self.d_grad(x))
+        y_pred = self.d_grad(self.Tyx(y))
 
-        y0 = self.gradient_point([y], [self.d_grad(x, False)])[0]
-        ty0x = self.Tyx(y0)
-        y0_pred = self.d_grad(ty0x)
+        pen = L2(y_pred, y) + L2(x_pred, x)
+        # grad_pen = self.d_grad(x).pow(2).view(x.shape[0], -1).sum(1).mean(0)
 
-        pen = L1(y0_pred, y0) + L1(x0_pred, x0)
-
-        return Loss(loss + self.pen_weight * pen)
+        return Loss(loss + pen * self.pen_weight)
 
     def generator_loss(self, x: Tensor):
 
@@ -85,5 +85,77 @@ class ConjugateGANLoss:
 
         return Loss(L1(x, tx))
 
+
+class ConjugateGANLoss2:
+
+    def __init__(self,
+                 Dx: Discriminator,
+                 Dy: Discriminator,
+                 pen_weight: float = 100):
+
+        self.Dx = Dx
+        self.Dy = Dy
+        self.pen_weight = pen_weight
+        print("pen_w: ", pen_weight)
+
+    def parameters(self):
+        return chain(self.Dx.parameters(), self.Dy.parameters())
+
+    def Txy(self, x: Tensor, create_graph=True) -> Tensor:
+
+        if not x.requires_grad:
+            x.requires_grad = True
+
+        dx: Tensor = self.Dx.forward(x)
+
+        res, = torch.autograd.grad(outputs=dx,
+                                   inputs=x,
+                                   grad_outputs=torch.ones(dx.shape, device=dx.device),
+                                   create_graph=create_graph,
+                                   only_inputs=True)
+
+        return res
+
+    def Tyx(self, y: Tensor, create_graph=True) -> Tensor:
+
+        if not y.requires_grad:
+            y.requires_grad = True
+
+        dy: Tensor = self.Dy.forward(y)
+
+        res, = torch.autograd.grad(outputs=dy,
+                                   inputs=y,
+                                   grad_outputs=torch.ones(dy.shape, device=y.device),
+                                   create_graph=create_graph,
+                                   only_inputs=True)
+
+        return res
+
+    def discriminator_loss(self, x: Tensor, y: Tensor):
+        L1 = nn.L1Loss()
+        L2 = nn.MSELoss()
+
+        x = x.detach()
+        y = y.detach()
+
+        loss: Tensor = self.Dx(x).mean() + self.Dy(y).mean()
+
+        x_pred = self.Tyx(self.Txy(x))
+        y_pred = self.Txy(self.Tyx(y))
+
+        pen = L2(y_pred, y) + L2(x_pred, x)
+        # grad_pen = self.d_grad(x).pow(2).view(x.shape[0], -1).sum(1).mean(0)
+        # grad_pen = self.Txy(x).pow(2).view(x.shape[0], -1).sum(1).mean() + self.Tyx(y).pow(2).view(x.shape[0], -1).sum(1).mean()
+        # print("loss", loss.item())
+        # print("pen", pen.item())
+
+        return Loss(loss + pen * self.pen_weight)
+
+    def generator_loss(self, x: Tensor):
+
+        L1 = nn.L1Loss()
+        y: Tensor = self.Txy(x, False).detach()
+
+        return Loss(L1(x, y))
 
 

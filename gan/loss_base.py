@@ -28,6 +28,9 @@ class Loss:
     def __truediv__(self, weight: float):
         return Loss(self.__tensor / weight)
 
+    def cuda(self):
+        return Loss(self.__tensor.cuda())
+
     def minimize(self) -> None:
         return self.__tensor.backward()
 

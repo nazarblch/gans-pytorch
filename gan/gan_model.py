@@ -15,13 +15,14 @@ from gan.loss.wasserstein import WassersteinLoss
 from models.common import View
 from models.lambdamodule import LambdaModule
 from models.munit.enc_dec import MsImageDis, AdaINGen, MunitEncoder, CondMsImageDis
+from models.stylegan import ScaledConvTranspose2d
 from models.uptosize import MakeNoise, Uptosize
 from models.munit.enc_dec import StyleEncoder, ContentEncoder, Conv2dBlock #LayerNorm
 from munit.utils import weights_init
-from stylegan2.model import Generator as StyleGenerator2, EqualLinear, ConvLayer, EqualConv2d, StyledConv
+from stylegan2.model import Generator as StyleGenerator2, EqualLinear, ConvLayer, EqualConv2d, StyledConv, ResBlock
 from stylegan2.model import Discriminator as StyleDiscriminator2
 from gan.generator import Generator
-from gan.loss.gan_loss import GANLoss
+from gan.loss.gan_loss import GANLoss, StyleGANLoss
 from gan.loss_base import Loss
 from optim.min_max import MinMaxParameters, MinMaxOptimizer, MinMaxLoss
 
@@ -158,7 +159,7 @@ name_to_gan_loss = {
 GeneratorClass = TypeVar('GeneratorClass', bound=Generator)
 class CondStyleGanModel(ConditionalGANModel, Generic[GeneratorClass]):
 
-    def __init__(self, generator: GeneratorClass, loss: GANLoss, lr: Tuple[float, float] = (0.0015, 0.002)):
+    def __init__(self, generator: GeneratorClass, loss: StyleGANLoss, lr: Tuple[float, float] = (0.0015, 0.002)):
         self.generator = generator
         self.loss = loss
         params = MinMaxParameters(self.generator.parameters(), self.loss.parameters())
@@ -171,6 +172,30 @@ class CondStyleGanModel(ConditionalGANModel, Generic[GeneratorClass]):
             StyleGeneratorPenalty(self.path_regularize * self.g_reg_every),
             lambda i: i % self.g_reg_every == 0
         )
+
+    def loss_pair(self, real: List[Tensor], fake: List[Tensor], latent: List[Tensor], condition: Tensor) -> MinMaxLoss:
+        #condition = condition.detach().requires_grad_(True)
+        condition_detach = condition.detach()
+
+        return MinMaxLoss(
+            self.loss.generator_loss(real + [condition_detach], fake + [condition_detach]) + self.gen_penalty(fake[0], [latent[0], condition]),
+            self.loss.discriminator_loss_with_penalty(real + [condition_detach], fake + [condition_detach])
+        )
+
+    def disc_train(self, real: List[Tensor], fake: List[Tensor], condition: Tensor):
+        requires_grad(self.loss.discriminator, True)
+        # condition_detach = condition.detach()
+        # fake = [f.detach() for f in fake]
+        self.loss.discriminator_loss_with_penalty(real + [condition], fake + [condition]).maximize_step(
+            self.optimizer.opt_max
+        )
+
+    def generator_loss(self, real: List[Tensor], fake: List[Tensor], latent: List[Tensor], condition: Tensor) -> Loss:
+        requires_grad(self.loss.discriminator, False)
+        gen_loss = self.loss.generator_loss(real + [condition], fake + [condition])
+        # pen = self.gen_penalty(fake[0], [latent[0], condition])
+        return gen_loss
+
 
     def train(self, real: List[Tensor], condition: Tensor, noise: List[Tensor]):
 
@@ -301,13 +326,16 @@ class CondStyleDisc2Wrapper(Discriminator):
         out = self.disc.final_conv(out)
 
         out = out.view(batch, -1)
-        out = torch.cat([out, cond], dim = 1)
+        out_norm = torch.sqrt(torch.sum(out ** 2)).detach()
+        cond_norm = torch.sqrt(torch.sum(cond ** 2)).detach()
+        out = torch.cat([out, cond * out_norm / cond_norm], dim = 1)
         out = self.final_linear(out)
 
         return out
 
     def forward(self, img: Tensor, cond: Tensor):
-        x = torch.cat([img, self.cond_uptosize(cond)], dim=1)
+        cond_true_size = self.cond_uptosize(cond)
+        x = torch.cat([img, cond_true_size], dim=1)
 
         return self.forward_disc(x, cond) #self.disc(x)
 
@@ -480,35 +508,37 @@ def cont_style_munit_enc(args, cont_path: Optional[str] = None, style_path: Opti
     return enc.cuda()
 
 
+def cond_ganmodel_munit(args, munit_args, path, starting_model_number: int):
+    cont_style_encoder: MunitEncoder = cont_style_munit_enc(
+        munit_args,
+        None,  # "/home/ibespalov/pomoika/munit_content_encoder15.pt",
+        None  # "/home/ibespalov/pomoika/munit_style_encoder_1.pt"
+    )  # .to(device)
 
-def cond_ganmodel_munit(loss_type: str, lr: Tuple[float, float], args, path: Optional[str]) -> ConditionalGANModel:
-    input_dim = args.input_dim
-    dim = args.dim
-    style_dim = args.style_dim
-    n_downsample = args.n_downsample
-    n_res = args.n_res
-    activ = args.activ
-    pad_type = args.pad_type
-    mlp_dim = args.mlp_dim
-    n_layer = args.n_layer
-    norm = args.norm
-    num_scales = args.num_scales
+    args.latent = 512
+    args.n_mlp = 5
 
-    gen = AdaINGen(input_dim, dim, style_dim, n_downsample, n_res, mlp_dim).cuda()
-    disc = CondMsImageDis(input_dim, n_layer, dim, norm, activ, num_scales, pad_type).cuda()
+    args.start_iter = 0
 
-    loss: GANLoss = name_to_gan_loss[loss_type](disc)
-    gan_model = ConditionalGANModel(
-        gen,
-        loss,
-        lr=lr,
-        do_init_ws=False
-    )
+    generator = CondGen2(StyleGenerator2(
+        args.size, args.latent, args.n_mlp, channel_multiplier=args.channel_multiplier
+    ))  # .to(device)
 
-    if path:
-        gan_model.model_load(path)
+    discriminator = CondStyleDisc2Wrapper(StyleDiscriminator2(
+        args.size, channel_multiplier=args.channel_multiplier
+    ))  # .to(device)
+    weights = torch.load(f"{path}stylegan2_invertable_{str(starting_model_number).zfill(6)}.pt",
+                         map_location="cpu")
+    generator.load_state_dict(weights['g'])
+    generator = generator.cuda()
+    discriminator.load_state_dict(weights['d'])
+    discriminator = discriminator.cuda()
+    cont_style_encoder.load_state_dict(weights['enc'])
+    cont_style_encoder = cont_style_encoder.cuda()
 
-    return gan_model
+    return generator, discriminator, cont_style_encoder
+
+
 
 
 class CondGen2(nn.Module):
@@ -546,3 +576,121 @@ class CondGen2(nn.Module):
         #         noise[i] = None
 
         return self.gen(z, condition=input, noise=noise, return_latents=return_latents, inject_index=self.inject_index)
+
+
+class CondGen3(nn.Module):
+
+    def __init__(self, gen: StyleGenerator2):
+        super().__init__()
+
+        self.gen: Generator = gen
+        self.noise_up = nn.ModuleList([
+            ScaledConvTranspose2d(68, self.gen.channels[128], 3),
+            ScaledConvTranspose2d(self.gen.channels[128], self.gen.channels[256], 3),
+        ])
+        self.noise_down = nn.ModuleList([
+            ConvLayer(68, self.gen.channels[64], 3, downsample=False),
+            ConvLayer(self.gen.channels[64], self.gen.channels[32], 3, downsample=True),
+            ConvLayer(self.gen.channels[32], self.gen.channels[16], 3, downsample=True),
+            ConvLayer(self.gen.channels[16], self.gen.channels[8], 3, downsample=True),
+            ConvLayer(self.gen.channels[8], self.gen.channels[4], 3, downsample=True)
+        ])
+        self.inject_index = 2
+
+    def make_noise(self, heatmap: Tensor):
+        x = heatmap * 10
+        noise_up_list = []
+        for i in self.noise_up:
+            x = i.forward(x)
+            noise_up_list.append(x)
+            noise_up_list.append(x)
+
+        y = heatmap * 10
+        noise_down_list = []
+        for i in self.noise_down:
+            y = i.forward(y)
+            noise_down_list.append(y)
+            noise_down_list.append(y)
+
+        return noise_down_list[-2::-1] + noise_up_list
+
+    def decode(self, cond: Tensor, latent: Tensor):
+        noise = self.make_noise(cond)
+        latent = [latent[:, 0], latent[:, 1]]
+        return self.gen(latent, condition=noise[0], noise=noise, input_is_latent=True, inject_index=self.inject_index)[0]
+
+    def forward(self, cond: Tensor, z: List[Tensor], return_latents=False):
+        noise = self.make_noise(cond)
+        return self.gen(z, condition=noise[0], noise=noise, return_latents=return_latents, inject_index=self.inject_index)
+
+
+class CondDisc3(nn.Module):
+    def __init__(self, size, channel_multiplier=1, blur_kernel=[1, 3, 3, 1]):
+        super().__init__()
+
+        channels = {
+            4: 512,
+            8: 512,
+            16: 256,
+            32: 256,
+            64: 256 * channel_multiplier,
+            128: 128 * channel_multiplier,
+            256: 64 * channel_multiplier,
+            512: 32 * channel_multiplier,
+            1024: 16 * channel_multiplier,
+        }
+
+        self.channels = channels
+        convs = [ConvLayer(3, channels[size], 1)]
+
+        log_size = int(math.log(size, 2))
+
+        in_channel = channels[size]
+
+        for i in range(log_size, 6, -1):
+            out_channel = channels[2 ** (i - 1)]
+            convs.append(ResBlock(in_channel, out_channel, blur_kernel))
+            in_channel = out_channel
+
+        self.convs = nn.Sequential(*convs)
+
+        in_channel = in_channel + 68
+
+        convs_with_hm = []
+        for i in range(6, 2, -1):
+            out_channel = channels[2 ** (i - 1)]
+            convs_with_hm.append(ResBlock(in_channel, out_channel, blur_kernel))
+            in_channel = out_channel
+
+        self.convs_with_hm = nn.Sequential(*convs_with_hm)
+
+        self.stddev_group = 4
+        self.stddev_feat = 1
+
+        self.final_conv = ConvLayer(in_channel + 1, channels[4], 3)
+        self.final_linear = nn.Sequential(
+            EqualLinear(channels[4] * 4 * 4, channels[4], activation='fused_lrelu'),
+            EqualLinear(channels[4], 1),
+        )
+
+    def forward(self, input, cond):
+        out = self.convs(input)
+        out = torch.cat((out, cond * 10), dim=1)
+        out = self.convs_with_hm(out)
+
+        batch, channel, height, width = out.shape
+        group = min(batch, self.stddev_group)
+        stddev = out.view(
+            group, -1, self.stddev_feat, channel // self.stddev_feat, height, width
+        )
+        stddev = torch.sqrt(stddev.var(0, unbiased=False) + 1e-8)
+        stddev = stddev.mean([2, 3, 4], keepdims=True).squeeze(2)
+        stddev = stddev.repeat(group, 1, height, width)
+        out = torch.cat([out, stddev], 1)
+
+        out = self.final_conv(out)
+
+        out = out.view(batch, -1)
+        out = self.final_linear(out)
+
+        return out

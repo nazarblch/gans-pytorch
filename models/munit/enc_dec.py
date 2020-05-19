@@ -1,8 +1,8 @@
 from typing import List, Tuple
 from torch import nn, Tensor
 import torch
-from discriminator import Discriminator
-from generator import Generator
+from gans_pytorch.gan.discriminator import Discriminator
+from gans_pytorch.gan.generator import Generator
 from gans_pytorch.stylegan2.model import EqualLinear, ResBlock, EqualConv2d, StyledConv, ToRGB, PixelNorm
 from models.common import View
 from models.stylegan import ModulatedResBlocks, ModulatedResBlock
@@ -35,7 +35,7 @@ class ContentEncoder(nn.Module):
     def __init__(self, n_downsample, n_res, input_dim, dim, norm, activ, pad_type):
         super(ContentEncoder, self).__init__()
         self.model = []
-        self.model += [Conv2dBlock(input_dim, dim, 7, 1, 3, norm=norm, activation=activ, pad_type=pad_type)]
+        self.model += [Conv2dBlock(input_dim, dim, 3, 1, 1, norm=norm, activation=activ, pad_type=pad_type)]
         # downsampling blocks
         for i in range(n_downsample):
             self.model += [Conv2dBlock(dim, dim * 2, 4, 2, 1, norm=norm, activation=activ, pad_type=pad_type)]
@@ -397,7 +397,40 @@ class MunitEncoder(nn.Module):
                 nn.Sigmoid()
             )
 
+    def get_content(self, img: Tensor) -> Tensor:
+        content = self.enc_content(img) * 255 / 256
+        content = content.view(-1, 70, 2)[:, :, [1, 0]].view(-1, 140)
+        return content
+
     def forward(self, img: Tensor) -> Tuple[Tensor, Tensor]:
         content = self.enc_content(img) * 255 / 256
+        content = content.view(-1, 70, 2)[:, :, [1, 0]].view(-1, 140)
         style = self.enc_style(img)
         return content, style
+
+
+class MunitEncoder2(nn.Module):
+
+    def __init__(self, style_dim = 512, points_count = 68):
+        super().__init__()
+        self.enc_style = StyleEncoder(style_dim=style_dim)
+        n_res = 4
+        dim = 64
+        self.enc_content: ContentEncoder = ContentEncoder(2, n_res, 3, dim, 'in', "lrelu", "replicate")
+
+        self.style_dim = style_dim
+
+        self.enc_content = nn.Sequential(
+                self.enc_content,
+                Conv2dBlock(256, 256, 4, 2, 1, norm='in', activation="lrelu", pad_type="replicate"),  # 32
+                Conv2dBlock(256, 256, 4, 2, 1, norm='in', activation="lrelu", pad_type="replicate"),  # 16
+                Conv2dBlock(256, 256, 4, 2, 1, norm='in', activation="lrelu", pad_type="replicate"),  # 8
+                Conv2dBlock(256, 256, 4, 2, 1, norm='in', activation="lrelu", pad_type="replicate"),  # 4
+                View(-1),
+                nn.Linear(256 * 4 * 4, points_count * 2),
+                nn.LeakyReLU(0.2, inplace=True),
+                nn.Linear(points_count * 2, points_count * 2),
+                nn.Sigmoid(),
+                View(points_count, 2)
+            )
+

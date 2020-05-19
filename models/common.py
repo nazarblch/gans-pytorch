@@ -8,7 +8,7 @@ class View(nn.Module):
         self.dims = dims
 
     def forward(self, inputs: Tensor):
-        return inputs.view(inputs.shape[0], *self.dims)
+        return inputs.contiguous().view(inputs.shape[0], *self.dims)
 
     def extra_repr(self):
         return ', '.join(str(dim) for dim in self.dims)

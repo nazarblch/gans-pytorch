@@ -72,7 +72,9 @@ class StyleGeneratorPenalty(GradientPenalty):
 
     def _compute(self, grads: List[Tensor]) -> Loss:
 
-        path_lengths = torch.sqrt(grads[0].pow(2).sum(2).mean(1) + grads[1].pow(2).sum(1))
+        dims_1 = list(range(1, grads[1].ndim))
+
+        path_lengths = torch.sqrt(grads[0].pow(2).sum(2).mean(1) + grads[1].pow(2).mean(dims_1))
 
         mean_path_length = self.mean_path_length + self.decay * (path_lengths.mean() - self.mean_path_length)
         self.mean_path_length = mean_path_length.detach()

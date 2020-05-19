@@ -9,7 +9,7 @@ class MinMaxLoss:
         self.max_loss = max_loss
 
     def add_min_loss(self, loss: Loss):
-        self.min_loss += loss
+        self.min_loss = self.min_loss + loss
         return self
 
     def add_max_loss(self, loss: Loss):

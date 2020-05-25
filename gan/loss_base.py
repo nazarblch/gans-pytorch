@@ -35,6 +35,11 @@ class Loss:
         return self.__tensor.backward()
 
     def minimize_step(self, *optimizers: Optimizer, retain_graph=False) -> None:
+
+        if self.__tensor == 0 or (not isinstance(self.__tensor, Tensor)):
+            print("ZERO loss value")
+            return
+
         for opt in optimizers:
             opt.zero_grad()
 
@@ -59,6 +64,9 @@ class Loss:
 
     def to_tensor(self) -> Tensor:
         return self.__tensor
+
+    def is_sero(self) -> bool:
+        return self.__tensor == 0 or (not isinstance(self.__tensor, Tensor))
 
 
 class LossModule(ABC):

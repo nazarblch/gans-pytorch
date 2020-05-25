@@ -614,14 +614,20 @@ class CondGen3(nn.Module):
 
         return noise_down_list[-2::-1] + noise_up_list
 
-    def decode(self, cond: Tensor, latent: Tensor):
-        noise = self.make_noise(cond)
-        latent = [latent[:, 0], latent[:, 1]]
-        return self.gen(latent, condition=noise[0], noise=noise, input_is_latent=True, inject_index=self.inject_index)[0]
-
     def forward(self, cond: Tensor, z: List[Tensor], return_latents=False):
         noise = self.make_noise(cond)
         return self.gen(z, condition=noise[0], noise=noise, return_latents=return_latents, inject_index=self.inject_index)
+
+
+class CondGenDecode(nn.Module):
+    def __init__(self, gen: CondGen3):
+        super().__init__()
+        self.gen: CondGen3 = gen
+
+    def forward(self, cond: Tensor, latent: Tensor):
+        noise = self.gen.make_noise(cond)
+        latent = [latent[:, 0], latent[:, 1]]
+        return self.gen.gen(latent, condition=noise[0], noise=noise, input_is_latent=True, inject_index=self.gen.inject_index)[0]
 
 
 class CondDisc3(nn.Module):

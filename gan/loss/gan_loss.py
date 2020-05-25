@@ -133,5 +133,17 @@ class StyleGANLoss(GANLoss):
         return Loss(g_nonsaturating_loss(dgz))
 
 
+class StyleGANLossWithoutPenalty(GANLoss):
+    def __init__(self, discriminator: Discriminator):
+        super().__init__(discriminator=discriminator)
+
+    def _discriminator_loss(self, dx: Tensor, dy: Tensor) -> Loss:
+        return Loss(-d_logistic_loss(dx, dy))
+
+    def _generator_loss(self, dgz: Tensor, real: List[Tensor], fake: List[Tensor]) -> Loss:
+        return Loss(g_nonsaturating_loss(dgz))
+
+
+
 
 

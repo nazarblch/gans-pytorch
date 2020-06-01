@@ -40,6 +40,17 @@ class StyleDiscriminatorPenalty(GradientDiscriminatorPenalty):
         return Loss(grads_cat.pow(2).sum(dim=1).mean() * self.weight)
 
 
+class StyleDiscriminatorImagePenalty(GradientDiscriminatorPenalty):
+    def __init__(self, weight):
+        self.weight = weight
+        super().__init__(lambda x, y: x)
+
+    def _compute(self, grads: List[Tensor]) -> Loss:
+        batch = grads[0].shape[0]
+        reshaped = grads[0].reshape(batch, -1)
+        return Loss(reshaped.pow(2).sum(dim=1).mean() * self.weight)
+
+
 class GradientPenalty:
 
     def __init__(self, out_aggregate: Callable[[Tensor], Tensor]):

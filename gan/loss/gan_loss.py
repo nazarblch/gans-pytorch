@@ -7,7 +7,10 @@ from torch.nn import functional as F
 from gan.discriminator import Discriminator
 from gan.loss.penalties.penalty import DiscriminatorPenalty
 from gan.loss_base import Loss
-from gan.loss.penalties.style_gan_penalty import StyleDiscriminatorPenalty, PenaltyWithCounter
+from gan.loss.penalties.style_gan_penalty import StyleDiscriminatorPenalty, PenaltyWithCounter, \
+    StyleDiscriminatorImagePenalty
+
+
 # from stylegan_train import d_logistic_loss, g_nonsaturating_loss
 
 def d_logistic_loss(real_pred, fake_pred):
@@ -43,6 +46,15 @@ class GANLoss(ABC):
             loss_sum = loss_sum - pen.__call__(self.discriminator, Dx, Dy, x_detach, y_detach)
 
         return loss_sum
+
+    def discriminator_loss_as_is(self,
+                                   x: List[Tensor],
+                                   y: List[Tensor]) -> Loss:
+
+        Dx = self.discriminator.forward(*x)
+        Dy = self.discriminator.forward(*y)
+
+        return self._discriminator_loss(Dx, Dy)
 
     def generator_loss(self, real: List[Tensor], fake: List[Tensor]) -> Loss:
         return self._generator_loss(self.discriminator.forward(*fake), real, fake)
@@ -122,7 +134,8 @@ class GANLossObject(GANLoss):
 class StyleGANLoss(GANLoss):
     def __init__(self, discriminator: Discriminator, r1=10, d_reg_every=16):
         super().__init__(discriminator=discriminator)
-        penalty = StyleDiscriminatorPenalty(r1 * d_reg_every / 2)
+        # penalty = StyleDiscriminatorPenalty(r1 * d_reg_every / 2)
+        penalty = StyleDiscriminatorImagePenalty(r1 * d_reg_every / 2)
         penalty_counter = PenaltyWithCounter(penalty, lambda x: x % d_reg_every == 0)
         self.add_penalties([penalty_counter])
 

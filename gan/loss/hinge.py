@@ -2,8 +2,8 @@ from typing import List
 
 from torch import Tensor
 
-from gan.loss.gan_loss import GANLoss
-from gan.loss_base import Loss
+from gan.loss.base import GANLoss
+from gan.loss.loss_base import Loss
 
 
 class HingeLoss(GANLoss):

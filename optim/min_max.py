@@ -1,6 +1,7 @@
 from typing import Iterator
 from torch import optim, Tensor
-from gan.loss_base import Loss
+
+from gan.loss.loss_base import Loss
 
 
 class MinMaxLoss:

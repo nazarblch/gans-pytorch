@@ -1,19 +1,13 @@
 from __future__ import print_function
 #%matplotlib inline
 import random
-import time
-
 import torch.utils.data
 import torchvision.datasets as dset
 import torchvision.transforms as transforms
-from torch import nn, Tensor
 from torchvision import utils
-
-from gan.dcgan.discriminator import ConvICNN128
 from stylegan2.model import Generator as StyleGen
-from gan.conjugate_gan_model import ConjugateGANModel
-from gan.loss.penalties.conjugate import ConjugateGANLoss, ConjugateGANLoss2
-from models.grad import Grad
+from gan.models.conjugate import ConjugateGANModel
+from gan.loss.penalties.conjugate import ConjugateGANLoss2
 from models.positive import PosDiscriminator
 from stylegan2.train import mixing_noise
 

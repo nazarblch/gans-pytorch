@@ -8,7 +8,7 @@ from gan.generator import Generator
 from torch import Tensor, nn
 
 from gan.loss.penalties.penalty import default_mix
-from gan.loss_base import Loss
+from gan.loss.loss_base import Loss
 
 
 class ConjugateGANLoss:

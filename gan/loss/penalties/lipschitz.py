@@ -4,7 +4,7 @@ import torch
 from torch import Tensor
 
 from gan.loss.penalties.penalty import GradientDiscriminatorPenalty, ApproxGradientDiscriminatorPenalty
-from gan.loss_base import Loss
+from gan.loss.loss_base import Loss
 
 
 class LipschitzPenalty(GradientDiscriminatorPenalty):

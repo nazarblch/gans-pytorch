@@ -2,11 +2,11 @@ import math
 
 from gan.discriminator import Discriminator
 from gan.generator import Generator
+from gan.loss.loss_base import Loss
 from gan.loss.penalties.penalty import GradientDiscriminatorPenalty, DiscriminatorPenalty
 from torch import Tensor
 import torch
 from typing import List, Callable, Tuple, TypeVar
-from gan.loss_base import Loss
 
 
 PenClass = TypeVar('PenClass')
@@ -35,7 +35,7 @@ class StyleDiscriminatorPenalty(GradientDiscriminatorPenalty):
 
     def _compute(self, grads: List[Tensor]) -> Loss:
         batch = grads[0].shape[0]
-        reshaped = [grad.view(batch, -1) for grad in grads]
+        reshaped = [grad.reshape(batch, -1) for grad in grads]
         grads_cat = torch.cat(reshaped, dim=1)
         return Loss(grads_cat.pow(2).sum(dim=1).mean() * self.weight)
 
@@ -50,6 +50,16 @@ class StyleDiscriminatorImagePenalty(GradientDiscriminatorPenalty):
         reshaped = grads[0].reshape(batch, -1)
         return Loss(reshaped.pow(2).sum(dim=1).mean() * self.weight)
 
+
+class StyleDiscriminatorCondPenalty(GradientDiscriminatorPenalty):
+    def __init__(self, weight):
+        self.weight = weight
+        super().__init__(lambda x, y: x)
+
+    def _compute(self, grads: List[Tensor]) -> Loss:
+        batch = grads[0].shape[0]
+        reshaped = grads[1].reshape(batch, -1)
+        return Loss(reshaped.pow(2).sum(dim=1).mean() * self.weight)
 
 class GradientPenalty:
 
@@ -83,9 +93,13 @@ class StyleGeneratorPenalty(GradientPenalty):
 
     def _compute(self, grads: List[Tensor]) -> Loss:
 
-        dims_1 = list(range(1, grads[1].ndim))
+        path_lengths = 0
 
-        path_lengths = torch.sqrt(grads[0].pow(2).sum(2).mean(1) + grads[1].pow(2).mean(dims_1))
+        for i in range(len(grads)):
+            B = grads[i].shape[0]
+            path_lengths = path_lengths + grads[i].pow(2).reshape(B, -1).mean(1)
+
+        path_lengths = path_lengths.sqrt()
 
         mean_path_length = self.mean_path_length + self.decay * (path_lengths.mean() - self.mean_path_length)
         self.mean_path_length = mean_path_length.detach()

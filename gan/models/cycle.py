@@ -1,6 +1,6 @@
 from typing import Callable, Generic, TypeVar, Iterable, Dict, Tuple, Any
 from torch import nn, Tensor, optim
-from gan.loss_base import Loss
+from gan.loss.loss_base import Loss
 
 
 class CycleGAN:
@@ -9,9 +9,7 @@ class CycleGAN:
                  g_21: Callable[[Dict[str, Any]], Dict[str, Any]],
                  loss_1: Callable[[Dict[str, Tuple[Any, Any]]], Loss],
                  loss_2: Callable[[Dict[str, Tuple[Any, Any]]], Loss],
-                 parameters: Iterable[Tensor],
-                 lr: float = 0.0001,
-                 betas=(0.5, 0.999)):
+                 *optimizers: ):
 
         self.g_12 = g_12
         self.g_21 = g_21

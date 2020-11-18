@@ -1,9 +1,6 @@
 from torch import Tensor, nn
 
-from framework.Loss import Loss
-from framework.nn.modules.common.vgg import Vgg16
-from framework.gan.loss.gan_loss import GANLoss
-from framework.parallel import ParallelConfig
+from gan.loss.base import GANLoss
 
 
 class VggGeneratorLoss(GANLoss, nn.Module):

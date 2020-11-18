@@ -5,7 +5,7 @@ from torch import Tensor
 import numpy as np
 
 from gan.discriminator import Discriminator
-from gan.loss_base import Loss
+from gan.loss.loss_base import Loss
 
 
 class DiscriminatorPenalty(ABC):

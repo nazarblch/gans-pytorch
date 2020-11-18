@@ -13,6 +13,12 @@ class Generator(nn.Module, ABC):
     def forward(self, *noise: Tensor) -> Tensor: pass
 
 
+class ConditionalGenerator(Generator):
 
+    def __init__(self):
+        super(ConditionalGenerator, self).__init__()
+
+    @abstractmethod
+    def forward(self, condition: Tensor, *noize: Tensor) -> Tensor: pass
 
 

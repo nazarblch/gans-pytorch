@@ -5,17 +5,11 @@ import torch
 from torch import Tensor
 import matplotlib.pyplot as plt
 
-from gan.conjugate_gan_model import ConjugateGANModel
-from gan.gan_model import GANModel
-from gan.euclidean.discriminator import EDiscriminator
-from gan.euclidean.generator import EGenerator
-from gan.loss.hinge import HingeLoss
-from gan.loss.penalties.conjugate import ConjugateGANLoss, ConjugateGANLoss2
-from gan.loss.wasserstein import WassersteinLoss
+from gan.models.conjugate import ConjugateGANModel
+from gan.nn.euclidean.discriminator import EDiscriminator
+from gan.nn.euclidean import EGenerator
+from gan.loss.penalties.conjugate import ConjugateGANLoss2
 from gan.noise.normal import NormalNoise
-from models.grad import Grad
-from optim.min_max import MinMaxOptimizer
-from torch import nn
 
 batch_size = 64
 noise_size = 2

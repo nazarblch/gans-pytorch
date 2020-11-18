@@ -11,6 +11,12 @@ class Discriminator(nn.Module, ABC):
     def forward(self, *x: Tensor) -> Tensor: pass
 
 
+class ConditionalDiscriminator(Discriminator):
+
+    @abstractmethod
+    def forward(self, x: Tensor, *condition: Tensor) -> Tensor: pass
+
+
 
 
 

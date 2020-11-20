@@ -1,10 +1,9 @@
 import math
 from torch import Tensor, nn
 from gan.generator import Generator as G
-from gan.noise import Noise
-from models.attention import SelfAttention2d
-from models.common import View
-from models.resnet.residual import Up2xResidualBlock, PaddingType
+from nn.common.attention import SelfAttention2d
+from nn.common.view import View
+from nn.resnet.residual import Up2xResidualBlock, PaddingType
 
 
 class DCGenerator(G):

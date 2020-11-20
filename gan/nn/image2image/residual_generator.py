@@ -3,9 +3,9 @@ from torch import nn, Tensor
 import numpy as np
 
 from gan.generator import Generator
-from models.resnet.down_block import DownBlock
-from models.resnet.residual import PaddingType, ResidualNet
-from models.resnet.up_block import UpBlock
+from nn.resnet.down_block import DownBlock
+from nn.resnet.residual import PaddingType, ResidualNet
+from nn.resnet.up_block import UpBlock
 
 
 class ResidualGenerator(Generator):

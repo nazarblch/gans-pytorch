@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List, Callable, TypeVar, Generic, Optional, Type, Union, Tuple, Dict, Any, Set
 import torch
+import typing
 from torch import Tensor
 import torch.nn as nn
 import torch.nn.functional as F
@@ -81,30 +82,53 @@ class InjectHead(StateInjector):
         return (state, *args), kw
 
 
-class Progressive(nn.Module, Generic[TLT]):
+class Progressive(nn.ModuleList, Generic[TLT]):
     def __init__(self,
                  blocks: List[nn.Module],
-                 injector: StateInjector,
+                 state_injector: StateInjector = InjectHead(),
                  collector_class: Type[TensorCollector[TLT]] = ListCollector
                  ):
-        super(Progressive, self).__init__()
-        self.model_list = nn.ModuleList(blocks)
+        super(Progressive, self).__init__(blocks)
         self.collector_class = collector_class
-        self.injector = injector
+        self.injector = state_injector
+
+    def get_args_i(self, i: int, *args: List[Tensor], **kw: List[Tensor]):
+
+        kw_i: Dict[str, Tensor] = dict((k, kw[k][i]) for k in kw.keys())
+        args_i: Tuple[Tensor, ...] = tuple(args[k][i] for k in range(len(args)))
+
+        return args_i, kw_i
+
+    def process(self, start: int, state: Tensor, collector: TensorCollector[TLT], *args: List[Tensor], **kw: List[Tensor]) -> TLT:
+        i = start
+
+        while i < self.__len__():
+            args_i_s, kw_i_s = self.get_args_i(i, *args, **kw)
+            args_i_s, kw_i_s = self.injector.inject(state, args_i_s, kw_i_s)
+            out = self[i](*args_i_s, **kw_i_s)
+            state = out
+            collector.append(out)
+            i += 1
+
+        return collector.result()
 
     def forward(self, state: Tensor, *args: List[Tensor], **kw: List[Tensor]) -> TLT:
         collector: TensorCollector[TLT] = self.collector_class()
         collector.append(state)
-        i = 0
-        while i < len(self.model_list):
-            kw_i: Dict[str, Tensor] = dict((k, kw[k][i]) for k in kw.keys())
-            args_i: Tuple[Tensor, ...] = tuple(args[k][i] for k in range(len(args)))
-            args_i_s, kw_i_s = self.injector.inject(state, args_i, kw_i)
-            out = self.model_list[i](*args_i_s, **kw_i_s)
-            state = out
-            collector.append(out)
-            i += 1
-        return collector.result()
+
+        return self.process(0, state, collector, *args, **kw)
+
+
+class ProgressiveWithoutState(Progressive[TLT]):
+
+    def forward(self, *args: List[Tensor], **kw: List[Tensor]) -> TLT:
+        collector: TensorCollector[TLT] = self.collector_class()
+
+        args_i_s, kw_i_s = self.get_args_i(0, *args, **kw)
+        state = self[0](*args_i_s, **kw_i_s)
+        collector.append(state)
+
+        return self.process(1, state, collector, *args, **kw)
 
 
 class ProgressiveWithStateInit(nn.Module, Generic[TLT]):
@@ -126,68 +150,6 @@ class ProgressiveWithStateInit(nn.Module, Generic[TLT]):
         args_tail: Tuple[List[Tensor], ...] = tuple(args[k][1:] for k in range(len(args)))
 
         return self.progressive.forward(state, *args_tail, **kw_tail)
-
-
-class InputFilter(ABC):
-    @abstractmethod
-    def filter(self, args: Tuple[List[Tensor], ...], kw: Dict[str, List[Tensor]]):
-        pass
-
-
-class InputFilterAll(InputFilter):
-    def filter(self, args: Tuple[List[Tensor], ...], kw: Dict[str, List[Tensor]]):
-        return args, kw
-
-
-class InputFilterName(InputFilter):
-    def __init__(self, names: Set[str]):
-        self.names = names
-
-    def filter(self, args: Tuple[List[Tensor], ...], kw: Dict[str, List[Tensor]]):
-        filtered_kw = {i: kw[i] for i in self.names}
-        return args, filtered_kw
-
-
-class InputFilterHorisontal(InputFilter):
-    def __init__(self, names: Set[str], indices: List[int]):
-        self.names = names
-        self.indices = indices
-
-    def filter(self, args: Tuple[List[Tensor], ...], kw: Dict[str, List[Tensor]]):
-        filtered_args = tuple(args[i] for i in self.indices)
-        filtered_kw = {i: kw[i] for i in self.names}
-        return filtered_args, filtered_kw
-
-
-class InputFilterVertical(InputFilter):
-    def __init__(self, indices: List[int]):
-        self.indices = indices
-
-    def filter(self, args: Tuple[List[Tensor], ...], kw: Dict[str, List[Tensor]]):
-        filtered_args = tuple([a[j] for j in self.indices] for a in args)
-        filtered_kw = {i: [kw[i][j] for j in self.indices] for i in kw.keys()}
-        return filtered_args, filtered_kw
-
-
-class ProgressiveSequential(nn.Module):
-
-    def __init__(self, *modules: Tuple[nn.Module, str, InputFilterHorisontal, InputFilterVertical]):
-        super().__init__()
-        self.modules = modules
-
-    def forward(self, state: List[Optional[Tensor]], *args: List[Tensor], **kw: List[Tensor]):
-        out, slovar = None, {**kw}
-        i = 0
-        for model, name, horisontal_filter, vertical_filter in self.modules:
-            model_args, model_kw = horisontal_filter.filter(args, slovar)
-            model_args, model_kw = vertical_filter.filter(model_args, model_kw)
-            if state[i] is not None:
-                out = model(state[i], *model_args, **model_kw)
-            else:
-                out = model(*model_args, **model_kw)
-            slovar[name] = out
-            i += 1
-        return out
 
 
 class ElementwiseModuleList(nn.Module, Generic[TLT]):

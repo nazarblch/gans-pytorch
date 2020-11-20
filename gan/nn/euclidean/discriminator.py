@@ -1,7 +1,6 @@
-import torch
 from torch import nn, Tensor
 from gan.discriminator import Discriminator as D
-from models.positive import PosLinear
+from nn.common.positive import PosLinear
 
 
 class EDiscriminator(D):

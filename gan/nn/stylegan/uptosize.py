@@ -1,13 +1,9 @@
-import math
 from typing import List
 
 from torch import nn, Tensor
-import torch
-from torch.nn import functional as F
-from stylegan2.model import Blur, ConvLayer, EqualLinear
-from stylegan2.op import FusedLeakyReLU
-from models.common import View
-from models.stylegan import ScaledConvTranspose2d
+from stylegan2.model import ConvLayer, EqualLinear
+from nn.common.view import View
+from gan.nn.stylegan.components import ScaledConvTranspose2d
 
 
 class Uptosize(nn.Module):
@@ -73,30 +69,3 @@ class UpsampleList(nn.Module):
         return res
 
 
-class MakeNoise(nn.Module):
-
-    def __init__(self, num_layers: int, nc: int, noise_nc: List[int]):
-        super().__init__()
-
-        nc_min = 16
-        self.upsample = UpsampleList(num_layers, nc, nc_min)
-        self.to_noise = nn.ModuleList()
-        tmp_channel = nc
-
-        for i in range(num_layers):
-            tmp_channel = max(nc_min, tmp_channel // 2)
-            self.to_noise.append(
-                ConvLayer(tmp_channel, noise_nc[i], 3)
-            )
-
-    def forward(self, vector: Tensor):
-
-        noises = []
-
-        for i, usample in enumerate(self.upsample(vector)):
-            ni = self.to_noise[i](usample)
-            noises.append(ni)
-            if i > 0:
-                noises.append(ni)
-
-        return noises

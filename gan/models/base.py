@@ -59,11 +59,11 @@ class GANModel:
         params = MinMaxParameters(self.generator.parameters(), self.loss.parameters())
         self.optimizer = MinMaxOptimizer(params, lr[0], lr[1])
 
-    def generator_loss(self, real: List[Tensor], fake: List[Tensor],  *additional) -> Loss:
+    def generator_loss(self, real: List[Tensor], fake: List[Tensor]) -> Loss:
         requires_grad(self.loss.discriminator, False)
         return self.loss.generator_loss(real, fake)
 
-    def discriminator_train(self, real: List[Tensor], fake: List[Tensor], *additional):
+    def discriminator_train(self, real: List[Tensor], fake: List[Tensor]):
         requires_grad(self.loss.discriminator, True)
         self.loss.discriminator_loss_with_penalty(real, fake).maximize_step(
             self.optimizer.opt_max
@@ -78,10 +78,10 @@ class GANModel:
 
 class ConditionalGANModel(GANModel):
 
-    def generator_loss(self, real: List[Tensor], fake: List[Tensor], condition: List[Tensor], *additional) -> Loss:
+    def generator_loss(self, real: List[Tensor], fake: List[Tensor], condition: List[Tensor]) -> Loss:
         return super(ConditionalGANModel, self).generator_loss(real + condition, fake + condition)
 
-    def discriminator_train(self, real: List[Tensor], fake: List[Tensor], condition: List[Tensor], *additional):
+    def discriminator_train(self, real: List[Tensor], fake: List[Tensor], condition: List[Tensor]):
         super(ConditionalGANModel, self).discriminator_train(real + condition, fake + condition)
 
 

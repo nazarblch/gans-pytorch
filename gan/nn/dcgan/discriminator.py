@@ -1,10 +1,10 @@
 import torch
 from torch import nn, Tensor
 from gan.discriminator import Discriminator as D
-from model import EqualConv2d, EqualLinear
-from models.attention import SelfAttention2d
-from models.common import View
-from models.positive import PosConv2d, PosLinear
+from model import EqualConv2d
+from nn.common.attention import SelfAttention2d
+from nn.common.view import View
+from nn.common.positive import PosConv2d, PosLinear
 
 
 class DCDiscriminator(D):

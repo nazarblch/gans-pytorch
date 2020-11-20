@@ -1,14 +1,11 @@
-from typing import List, Dict, Callable, Tuple, Optional, TypeVar, Generic, Any
 import math
 import torch
 from torch import Tensor, nn
 from gan.discriminator import Discriminator
-from models.common import View
-from models.stylegan import ScaledConvTranspose2d
-from models.uptosize import MakeNoise, Uptosize
-from stylegan2.model import Generator as StyleGenerator2, EqualLinear, ConvLayer, EqualConv2d, StyledConv, ResBlock
+from gan.nn.stylegan.components import ScaledConvTranspose2d
+from gan.nn.stylegan.uptosize import Uptosize
+from stylegan2.model import EqualLinear, ConvLayer, ResBlock
 from stylegan2.model import Discriminator as StyleDiscriminator2
-from gan.generator import Generator
 
 
 def cat_std_dev(x: Tensor, stddev_group, stddev_feat):

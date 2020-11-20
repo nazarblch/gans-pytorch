@@ -5,7 +5,7 @@ from torch import nn, Tensor
 from torch.nn import functional as F
 
 from gan.discriminator import Discriminator
-from models.common import View
+from nn.common.view import View
 from stylegan2.model import EqualLinear, EqualConv2d, Blur, ScaledLeakyReLU
 from stylegan2.op import fused_leaky_relu, FusedLeakyReLU
 

@@ -41,6 +41,9 @@ class StyleGanModel(GANModel, Generic[GeneratorClass]):
 
 class CondStyleGanModel(StyleGanModel, ConditionalGANModel):
 
+    def __init__(self, generator: GeneratorClass, loss: StyleGANLoss, lr: Tuple[float, float] = (0.001, 0.0015)):
+        super(StyleGanModel, self).__init__(generator, loss, lr)
+
     def generator_loss_with_penalty(self, real: List[Tensor], fake: List[Tensor], condition: List[Tensor]) -> Loss:
         return self.generator_loss(real, fake, condition) + self.gen_penalty(fake[0], condition)
 

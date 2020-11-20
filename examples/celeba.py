@@ -8,7 +8,7 @@ from torchvision import utils
 from stylegan2.model import Generator as StyleGen
 from gan.models.conjugate import ConjugateGANModel
 from gan.loss.penalties.conjugate import ConjugateGANLoss2
-from models.positive import PosDiscriminator
+from nn.common.positive import PosDiscriminator
 from stylegan2.train import mixing_noise
 
 manualSeed = 999

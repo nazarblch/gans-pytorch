@@ -3,6 +3,8 @@ from typing import Optional, List
 import torch
 from torch import Tensor, nn
 
+from nn.progressiya.base import TLT
+
 
 class Generator(nn.Module, ABC):
 
@@ -10,7 +12,7 @@ class Generator(nn.Module, ABC):
         super(Generator, self).__init__()
 
     @abstractmethod
-    def forward(self, *noise: Tensor) -> Tensor: pass
+    def forward(self, *noise: TLT) -> Tensor: pass
 
 
 class ConditionalGenerator(Generator):
@@ -19,6 +21,6 @@ class ConditionalGenerator(Generator):
         super(ConditionalGenerator, self).__init__()
 
     @abstractmethod
-    def forward(self, condition: Tensor, *noize: Tensor) -> Tensor: pass
+    def forward(self, condition: TLT, *noize: TLT) -> Tensor: pass
 
 

@@ -1,67 +1,92 @@
-from __future__ import print_function
-#%matplotlib inline
 import random
+import time
+import os, sys
+
+sys.path.append(os.path.join(sys.path[0], '../..'))
+sys.path.append(os.path.join(sys.path[0], '..'))
+sys.path.append(os.path.join(sys.path[0], '../stylegan2'))
+
+from typing import List
 import torch.utils.data
-import torchvision.datasets as dset
-import torchvision.transforms as transforms
-from torchvision import utils
-from stylegan2.model import Generator as StyleGen
-from gan.models.conjugate import ConjugateGANModel
-from gan.loss.penalties.conjugate import ConjugateGANLoss2
-from nn.common.positive import PosDiscriminator
-from stylegan2.train import mixing_noise
+from torch import Tensor
+from torch.utils.tensorboard import SummaryWriter
+from torchvision.utils import make_grid
+from dataset.lazy_loader import LazyLoader, Celeba
+from gan.loss.stylegan import StyleGANLoss
+from gan.models.stylegan import StyleGanModel
+from gan.nn.stylegan.discriminator import Discriminator
+from gan.nn.stylegan.generator import Generator, FromStyleConditionalGenerator
+from gan.noise.stylegan import mixing_noise
+from modules.accumulator import Accumulator
+from parameters.path import Paths
+
+
+def send_images_to_tensorboard(writer, data: Tensor, name: str, iter: int, count=8, normalize=True, range=(-1, 1)):
+    with torch.no_grad():
+        grid = make_grid(
+            data[0:count], nrow=count, padding=2, pad_value=0, normalize=normalize, range=range,
+            scale_each=False)
+        writer.add_image(name, grid, iter)
+
 
 manualSeed = 999
 random.seed(manualSeed)
 torch.manual_seed(manualSeed)
 
-batch_size = 8
+batch_size = 16
 image_size = 256
 noise_size = 512
 
-device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 torch.cuda.set_device(device)
 
-dataset = dset.ImageFolder(root="/raid/data/celeba",
-                           transform=transforms.Compose([
-                               transforms.Resize(image_size),
-                               transforms.CenterCrop(image_size),
-                               transforms.ToTensor(),
-                               transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-                           ]))
+test_sample_z = torch.randn(8, noise_size, device=device)
+Celeba.batch_size = batch_size
 
-dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=12)
+generator = Generator(FromStyleConditionalGenerator(image_size, noise_size), n_mlp=8)
+generator_ema = Accumulator(Generator(FromStyleConditionalGenerator(image_size, noise_size), n_mlp=8))
+generator_ema.storage_model.load_state_dict(generator.state_dict())
+generator = generator.cuda()
 
-netG = StyleGen(256, 512, 4, 1).to(device)
-netD_1 = PosDiscriminator(256).to(device)
-netD_2 = PosDiscriminator(256).to(device)
+discriminator = Discriminator(image_size).cuda()
 
-gan_model = ConjugateGANModel(netG, ConjugateGANLoss2(netD_1, netD_2))
+gan_model = StyleGanModel(generator, StyleGANLoss(discriminator), (0.001, 0.0015))
+
+writer = SummaryWriter(f"{Paths.default.board()}/celeba{int(time.time())}")
 
 print("Starting Training Loop...")
+starting_model_number = 0
 
-for epoch in range(5):
-    for i, data in enumerate(dataloader, 0):
+for i in range(100000):
 
-        imgs = data[0].to(device)
-        noise = mixing_noise(batch_size, 512, 0.9, device)
+    print(i)
 
-        loss_d = gan_model.train_disc(imgs, noise)
+    real_img = next(LazyLoader.celeba().loader).to(device)
 
-        loss_g = 0
-        if i > 50:
-            loss_g = gan_model.train_gen(noise)
+    noise: List[Tensor] = mixing_noise(batch_size, noise_size, 0.9, device)
+    fake, _ = generator.forward(noise, return_latents=False)
 
-        # Output training stats
-        if i % 10 == 0:
-            print('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f'
-                  % (epoch, 5, i, len(dataloader),
-                     loss_d, loss_g))
+    gan_model.discriminator_train([real_img], [fake.detach()])
+    gan_model.generator_loss([real_img], [fake]).minimize_step(gan_model.optimizer.opt_min)
 
-        if i % 100 == 0:
-            # with torch.no_grad():
-                fake = gan_model.forward(noise).detach().cpu()
-                # print(fake)
-                utils.save_image(
-                    fake, f'sample_{i}.png', nrow=batch_size//2, normalize=True, range=(-1, 1)
-                )
+    generator_ema.accumulate(generator, i, 0.98)
+
+    if i % 100 == 0:
+        generator_ema.write_to(generator)
+
+    if i % 100 == 0:
+        print(i)
+        with torch.no_grad():
+            fake_test, _ = generator.forward([test_sample_z])
+            send_images_to_tensorboard(writer, fake_test, "FAKE", i)
+
+
+    if i % 10000 == 0 and i > 0:
+        torch.save(
+            {
+                'g': generator.state_dict(),
+                'd': discriminator.state_dict(),
+                'g_ema': generator_ema.state_dict()
+            },
+            f'{Paths.default.models()}/celeba_gan_256_{str(i + starting_model_number).zfill(6)}.pt',
+        )

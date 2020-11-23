@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .base import Progressive, ReverseListCollector, LastElementCollector, \
-    ElementwiseModuleList, StateInjector, ProgressiveWithoutState, InjectLast
+    ElementwiseModuleList, StateInjector, ProgressiveWithoutState, InjectLast, TLT
 
 
 class InjectCatHead(StateInjector):
@@ -118,7 +118,7 @@ class ProgressiveSequential(nn.Module):
         self.layer_dict = nn.ModuleDict()
         self.return_keys = return_keys
 
-    def forward(self, *args: List[Tensor], **kw: List[Tensor]):
+    def forward(self, *args: TLT, **kw: TLT):
         out, slovar = None, {**kw}
         model_args, model_kw = args, slovar
 

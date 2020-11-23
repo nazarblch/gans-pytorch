@@ -1,5 +1,6 @@
 from typing import Optional
 
+import torch
 from torch import nn
 
 
@@ -9,6 +10,8 @@ class SkipPlus(nn.Module):
 
         self.layer = layer
         self.upsample = upsample
+        self.bias = nn.Parameter(torch.zeros(1))
+        self.w = nn.Parameter(torch.ones(1))
 
     def forward(self, input, skip=None):
         out = self.layer(input)
@@ -16,6 +19,6 @@ class SkipPlus(nn.Module):
         if skip is not None:
             if self.upsample is not None:
                 skip = self.upsample(skip)
-            out = out + skip
+            out = out + self.w * skip + self.bias
 
         return out

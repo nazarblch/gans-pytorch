@@ -28,7 +28,7 @@ class StyleGanModel(GANModel, Generic[GeneratorClass]):
         self.optimizer = MinMaxOptimizer(params, lr[0], lr[1], min_betas=(0, 0.792), max_betas=(0, 0.932))
 
         self.g_reg_every = 5
-        self.path_regularize = 1
+        self.path_regularize = 2
 
         self.gen_penalty = PenaltyWithCounter(
             StyleGeneratorPenalty(self.path_regularize * self.g_reg_every),

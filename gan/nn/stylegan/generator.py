@@ -2,13 +2,12 @@ import math
 import random
 import time
 from typing import List
-from model import Generator as StyleGenerator2
+from stylegan2_bk.model import Generator as StyleGenerator2
 import torch
 from torch import Tensor, nn
 from nn.common.view import View
 from gan.nn.stylegan.components import ScaledConvTranspose2d, ModulatedConv2d, PixelNorm, EqualLinear, StyledConv, \
     ToRGB, ConditionInjection, ConstantInput, ConvLayer
-from gan.nn.stylegan.uptosize import UpsampleList
 from nn.progressiya.base import Progressive, ProgressiveWithoutState, InjectByName, LastElementCollector
 from nn.progressiya.unet import ProgressiveSequential, ZapomniKak, InputFilterName, InputFilterVertical, CopyKwToArgs
 from gan.generator import Generator as G

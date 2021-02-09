@@ -46,7 +46,7 @@ Celeba.batch_size = batch_size
 generator = Generator(FromStyleConditionalGenerator(image_size, noise_size), n_mlp=8)
 discriminator = Discriminator(image_size)
 
-starting_model_number = 90000
+starting_model_number = 290000
 weights = torch.load(
     f'{Paths.default.models()}/celeba_gan_256_{str(starting_model_number).zfill(6)}.pt',
     map_location="cpu"

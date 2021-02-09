@@ -1,9 +1,8 @@
 from typing import List
 
 from torch import nn, Tensor
-from stylegan2.model import ConvLayer, EqualLinear
 from nn.common.view import View
-from gan.nn.stylegan.components import ScaledConvTranspose2d
+from gan.nn.stylegan.components import ScaledConvTranspose2d, EqualLinear, ConvLayer
 
 
 class Uptosize(nn.Module):

@@ -2,8 +2,7 @@ import math
 import torch
 from torch import Tensor, nn
 from gan.discriminator import Discriminator as D
-from gan.discriminator import ConditionalDiscriminator as CD
-from stylegan2.model import EqualLinear, ConvLayer, ResBlock
+from gan.nn.stylegan.components import ConvLayer, EqualLinear, ResBlock
 
 
 def cat_std_dev(x: Tensor, stddev_group, stddev_feat):

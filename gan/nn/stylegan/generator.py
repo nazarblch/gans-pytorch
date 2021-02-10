@@ -176,6 +176,47 @@ class Generator(G):
         return image, res_latent
 
 
+class HeatmapToImage(nn.Module):
+
+    def __init__(self, gen: FromStyleConditionalGenerator, z_to_style: NoiseToStyle, heatmap_channels: int):
+        super().__init__()
+
+        self.gen: FromStyleConditionalGenerator = gen
+        self.z_to_style: NoiseToStyle = z_to_style
+
+        self.init_cov = ConvLayer(heatmap_channels, self.gen.channels[256], kernel_size=1)
+
+        self.noise = nn.ModuleList([
+            ConvLayer(self.gen.channels[256], self.gen.channels[256], 3, downsample=False),
+            ConvLayer(self.gen.channels[256], self.gen.channels[128], 3, downsample=True),
+            ConvLayer(self.gen.channels[128], self.gen.channels[64], 3, downsample=True),
+            ConvLayer(self.gen.channels[64], self.gen.channels[32], 3, downsample=True),
+            ConvLayer(self.gen.channels[32], self.gen.channels[16], 3, downsample=True),
+            ConvLayer(self.gen.channels[16], self.gen.channels[8], 3, downsample=True),
+            ConvLayer(self.gen.channels[8], self.gen.channels[4], 3, downsample=True)
+        ])
+
+    def make_noise(self, heatmap: Tensor):
+        x = self.init_cov(heatmap)
+
+        noise_down_list = []
+        for i in self.noise:
+            x = i.forward(x)
+            noise_down_list.append(x)
+            noise_down_list.append(x)
+
+        return noise_down_list[-2::-1]
+
+    def forward(self, cond: Tensor, z: List[Tensor], return_latents=False, inject_index=None):
+
+        latent = self.z_to_style.forward(z, inject_index)
+        condition = self.make_noise(cond)
+        image = self.gen(condition[0], latent, condition)
+
+        res_latent = latent if return_latents else None
+
+        return image, res_latent
+
 
 class CondGen7(nn.Module):
 

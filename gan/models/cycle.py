@@ -9,17 +9,17 @@ class CycleGAN:
                  g_21: Callable[[Dict[str, Any]], Dict[str, Any]],
                  loss_1: Callable[[Dict[str, Tuple[Any, Any]]], Loss],
                  loss_2: Callable[[Dict[str, Tuple[Any, Any]]], Loss],
-                 *optimizers: ):
+                 *optimizers: optim.optimizer.Optimizer):
 
         self.g_12 = g_12
         self.g_21 = g_21
         self.loss_1 = loss_1
         self.loss_2 = loss_2
+        self.opt = optimizers
 
-        self.opt = optim.Adam(
-            parameters,
-            lr=lr,
-            betas=betas)
+    def zero_grad(self):
+        for o in self.opt:
+            o.zero_grad()
 
     def loss_forward(self, input1: Dict[str, Any]) -> Loss:
 
@@ -37,10 +37,8 @@ class CycleGAN:
 
     def train(self, input1: Dict[str, Any], input2: Dict[str, Any]):
 
-        self.opt.zero_grad()
-        self.loss_forward(input1).minimize()
-        self.opt.step()
+        self.zero_grad()
+        self.loss_forward(input1).minimize_step(*self.opt)
 
-        self.opt.zero_grad()
-        self.loss_backward(input2).minimize()
-        self.opt.step()
+        self.zero_grad()
+        self.loss_backward(input2).minimize_step(*self.opt)

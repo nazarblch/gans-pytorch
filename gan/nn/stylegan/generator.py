@@ -1,3 +1,4 @@
+import itertools
 import math
 import random
 import time
@@ -113,6 +114,7 @@ class FromStyleConditionalGenerator(CG):
             in_channel = out_channel
 
         self.n_latent = self.log_size * 2 - 2
+        # print( self.n_latent)
 
         self.progression = ProgressiveSequential(
             CopyKwToArgs({"init"}),
@@ -184,9 +186,10 @@ class HeatmapToImage(nn.Module):
         self.gen: FromStyleConditionalGenerator = gen
         self.z_to_style: NoiseToStyle = z_to_style
 
-        self.init_cov = ConvLayer(heatmap_channels, self.gen.channels[256], kernel_size=1)
+        # self.init_cov = ConvLayer(heatmap_channels, self.gen.channels[256], kernel_size=1)
 
-        self.noise = nn.ModuleList([
+        self.noise = Progressive([
+            ConvLayer(heatmap_channels, self.gen.channels[256], kernel_size=1),
             ConvLayer(self.gen.channels[256], self.gen.channels[256], 3, downsample=False),
             ConvLayer(self.gen.channels[256], self.gen.channels[128], 3, downsample=True),
             ConvLayer(self.gen.channels[128], self.gen.channels[64], 3, downsample=True),
@@ -196,21 +199,11 @@ class HeatmapToImage(nn.Module):
             ConvLayer(self.gen.channels[8], self.gen.channels[4], 3, downsample=True)
         ])
 
-    def make_noise(self, heatmap: Tensor):
-        x = self.init_cov(heatmap)
-
-        noise_down_list = []
-        for i in self.noise:
-            x = i.forward(x)
-            noise_down_list.append(x)
-            noise_down_list.append(x)
-
-        return noise_down_list[-2::-1]
-
     def forward(self, cond: Tensor, z: List[Tensor], return_latents=False, inject_index=None):
 
         latent = self.z_to_style.forward(z, inject_index)
-        condition = self.make_noise(cond)
+        condition = self.noise(cond)[-1:1:-1]
+        condition = list(itertools.chain(*zip(condition, condition)))[1:]
         image = self.gen(condition[0], latent, condition)
 
         res_latent = latent if return_latents else None

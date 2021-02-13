@@ -211,6 +211,22 @@ class HeatmapToImage(nn.Module):
         return image, res_latent
 
 
+class HeatmapAndStyleToImage(nn.Module):
+
+    def __init__(self, gen: HeatmapToImage):
+        super().__init__()
+        self.gen = gen
+
+    def forward(self, cond: Tensor, latent: Tensor):
+
+        condition = self.gen.noise(cond)[-1:1:-1]
+        condition = list(itertools.chain(*zip(condition, condition)))[1:]
+        latent_list = [latent[:, k] for k in range(latent.shape[1])]
+        image = self.gen.gen(condition[0], latent_list, condition)
+
+        return image
+
+
 class CondGen7(nn.Module):
 
     def __init__(self, gen: StyleGenerator2, heatmap_channels: int, cond_mult: float = 10):

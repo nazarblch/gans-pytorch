@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 
-from criteria.lpips.networks import get_network, LinLayers
-from criteria.lpips.utils import get_state_dict
+from gan.loss.perceptual.lpips.networks import get_network, LinLayers
+from gan.loss.perceptual.lpips.utils import get_state_dict
 
 
 class LPIPS(nn.Module):

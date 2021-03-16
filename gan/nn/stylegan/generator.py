@@ -178,6 +178,18 @@ class Generator(G):
         return image, res_latent
 
 
+class Decoder(nn.Module):
+    def __init__(self, gen: nn.Module):
+        super().__init__()
+        self.gen = gen
+
+    def forward(self, latent: List[Tensor]):
+
+        condition = self.gen.make_noise(latent[0].shape[0], latent[0].device)
+        image = self.gen.gen(self.gen.input(latent[0]), latent, condition)
+
+        return image
+
 class HeatmapToImage(nn.Module):
 
     def __init__(self, gen: FromStyleConditionalGenerator, z_to_style: NoiseToStyle, heatmap_channels: int):
@@ -188,16 +200,18 @@ class HeatmapToImage(nn.Module):
 
         # self.init_cov = ConvLayer(heatmap_channels, self.gen.channels[256], kernel_size=1)
 
-        self.noise = Progressive([
-            ConvLayer(heatmap_channels, self.gen.channels[256], kernel_size=1),
-            ConvLayer(self.gen.channels[256], self.gen.channels[256], 3, downsample=False),
-            ConvLayer(self.gen.channels[256], self.gen.channels[128], 3, downsample=True),
-            ConvLayer(self.gen.channels[128], self.gen.channels[64], 3, downsample=True),
-            ConvLayer(self.gen.channels[64], self.gen.channels[32], 3, downsample=True),
-            ConvLayer(self.gen.channels[32], self.gen.channels[16], 3, downsample=True),
-            ConvLayer(self.gen.channels[16], self.gen.channels[8], 3, downsample=True),
-            ConvLayer(self.gen.channels[8], self.gen.channels[4], 3, downsample=True)
-        ])
+        self.noise = [
+            ConvLayer(heatmap_channels, self.gen.channels[gen.size], kernel_size=1),
+            ConvLayer(self.gen.channels[gen.size], self.gen.channels[gen.size], 3, downsample=False),
+        ]
+        tmp_size = gen.size
+        while tmp_size > 4:
+            self.noise.append(
+                ConvLayer(self.gen.channels[tmp_size], self.gen.channels[tmp_size//2], 3, downsample=True)
+            )
+            tmp_size = tmp_size // 2
+
+        self.noise = Progressive(self.noise)
 
     def forward(self, cond: Tensor, z: List[Tensor], return_latents=False, inject_index=None):
 

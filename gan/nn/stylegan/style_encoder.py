@@ -10,7 +10,7 @@ from nn.resnet.ir_se import make_res_blocks, bottleneck_IR, bottleneck_IR_SE
 
 
 class StyleEncoder(nn.Module):
-    def __init__(self, style_dim):
+    def __init__(self, style_dim, count):
         super(StyleEncoder, self).__init__()
         self.model = [
             EqualConv2d(3, 16, 7, 1, 3),
@@ -29,8 +29,8 @@ class StyleEncoder(nn.Module):
             nn.LeakyReLU(0.2, inplace=True),
             View(-1),
             EqualLinear(256 * 4 * 4, style_dim * 2, activation="fused_lrelu"),
-            EqualLinear(style_dim * 2, style_dim * 2),
-            View(2, style_dim)
+            EqualLinear(style_dim * 2, style_dim * count),
+            View(count, style_dim)
         ]
 
         self.model = nn.Sequential(*self.model)

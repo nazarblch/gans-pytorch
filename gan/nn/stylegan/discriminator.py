@@ -20,19 +20,20 @@ def cat_std_dev(x: Tensor, stddev_group, stddev_feat):
 
 
 class Discriminator(D):
+
     def __init__(self, size,  input_nc=3, channel_multiplier=1, blur_kernel=[1, 3, 3, 1]):
         super().__init__()
 
         channels = {
             4: 512,
             8: 512,
-            16: 256 * channel_multiplier,
-            32: 256 * channel_multiplier,
-            64: 256 * channel_multiplier,
-            128: 128 * channel_multiplier,
-            256: 64 * channel_multiplier,
-            512: 32 * channel_multiplier,
-            1024: 16 * channel_multiplier,
+            16: int(256 * channel_multiplier),
+            32: int(256 * channel_multiplier),
+            64: int(256 * channel_multiplier),
+            128: int(128 * channel_multiplier),
+            256: int(64 * channel_multiplier),
+            512: int(32 * channel_multiplier),
+            1024: int(16 * channel_multiplier),
         }
         self.channels = channels
         convs = [ConvLayer(input_nc, channels[size], 1)]

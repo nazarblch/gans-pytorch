@@ -1,19 +1,24 @@
 import torch
 from torch import nn, Tensor
+
+from gan.loss.loss_base import Loss
 from gan.loss.perceptual import id_loss, w_norm
 from gan.loss.perceptual.lpips.lpips import LPIPS
 import torch.nn.functional as F
+
+from gan.models.base import requires_grad
+from parameters.path import Paths
 
 
 class PSPLoss(nn.Module):
 
     def __init__(self,
-                 lpips_lambda,
-                 id_lambda,
-                 w_norm_lambda,
-                 l2_lambda,
-                 latent_avg,
-                 model_path_ir_se50):
+                 lpips_lambda=0.8,
+                 id_lambda=0.1,
+                 w_norm_lambda=0,
+                 l2_lambda=1.0,
+                 latent_avg=None,
+                 model_path_ir_se50=f"{Paths.default.models()}/model_ir_se50.pth"):
         super().__init__()
 
         self.lpips_lambda = lpips_lambda
@@ -23,9 +28,11 @@ class PSPLoss(nn.Module):
         self.latent_avg = latent_avg
 
         if lpips_lambda > 0:
-            self.lpips_loss = LPIPS(net_type='alex').to(self.device).eval()
+            self.lpips_loss = LPIPS(net_type='alex').cuda().eval()
+            requires_grad(self.lpips_loss, False)
         if id_lambda > 0:
-            self.id_loss = id_loss.IDLoss(model_path_ir_se50).to(self.device).eval()
+            self.id_loss = id_loss.IDLoss(model_path_ir_se50).cuda().eval()
+            requires_grad(self.id_loss, False)
         if w_norm_lambda > 0:
             self.w_norm_loss = w_norm.WNormLoss(start_from_latent_avg=self.opts.start_from_latent_avg)
 
@@ -60,4 +67,4 @@ class PSPLoss(nn.Module):
 
         loss_dict['loss'] = float(loss)
 
-        return loss, loss_dict, id_logs
+        return Loss(loss)

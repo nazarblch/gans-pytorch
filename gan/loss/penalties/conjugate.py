@@ -146,7 +146,7 @@ class ConjugateGANLoss2:
         pen = L2(y_pred, y) + L2(x_pred, x)
         # grad_pen = self.d_grad(x).pow(2).view(x.shape[0], -1).sum(1).mean(0)
         # grad_pen = self.Txy(x).pow(2).view(x.shape[0], -1).sum(1).mean() + self.Tyx(y).pow(2).view(x.shape[0], -1).sum(1).mean()
-        # print("loss", loss.item())
+        # print("brule_loss", brule_loss.item())
         # print("pen", pen.item())
 
         return Loss(loss + pen * self.pen_weight)

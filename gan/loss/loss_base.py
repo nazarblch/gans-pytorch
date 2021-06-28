@@ -37,7 +37,7 @@ class Loss:
     def minimize_step(self, *optimizers: Optimizer, retain_graph=False) -> None:
 
         if self.__tensor == 0 or (not isinstance(self.__tensor, Tensor)):
-            print("ZERO loss value")
+            print("ZERO brule_loss value")
             return
 
         for opt in optimizers:

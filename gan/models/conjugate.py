@@ -25,7 +25,7 @@ class ConjugateGANModel:
     def forward(self, noise: Tensor):
         fake = self.generator.forward(noise)
         return fake
-        # return self.loss.d_grad(fake)
+        # return self.brule_loss.d_grad(fake)
 
     def train_disc(self, real: Tensor, noise: Tensor):
         fake = self.generator.forward(noise)

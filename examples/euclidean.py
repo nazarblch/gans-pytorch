@@ -65,7 +65,7 @@ for iter in range(0, 9000):
         loss_g = gan_model.train_gen(z)
 
     if iter % 300 == 0:
-        # print(gan_model.loss.get_penalties()[1].weight)
+        # print(gan_model.brule_loss.get_penalties()[1].weight)
         print(str(loss_d) + ", g = " + str(loss_g))
         fake = gan_model.forward(z)
         plt.scatter(fake[:, 0].cpu().view(batch_size).detach().numpy(),

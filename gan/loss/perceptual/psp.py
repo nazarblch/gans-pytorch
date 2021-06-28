@@ -65,6 +65,6 @@ class PSPLoss(nn.Module):
             loss_dict['loss_w_norm'] = float(loss_w_norm)
             loss += loss_w_norm * self.w_norm_lambda
 
-        loss_dict['loss'] = float(loss)
+        loss_dict['brule_loss'] = float(loss)
 
         return Loss(loss)
